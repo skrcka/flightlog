@@ -404,10 +404,10 @@ fn restrict_dir(parent: &Dir, name: &Path) -> Result<()> {
     {
         use cap_fs_ext::OpenOptionsMaybeDirExt;
         use cap_std::fs::OpenOptionsExt;
-        use windows_sys::Win32::Storage::FileSystem::WRITE_DAC;
+        use windows_sys::Win32::{Foundation::GENERIC_READ, Storage::FileSystem::WRITE_DAC};
         let mut options = OpenOptions::new();
         options
-            .access_mode(WRITE_DAC)
+            .access_mode(GENERIC_READ | WRITE_DAC)
             .maybe_dir(true)
             .follow(FollowSymlinks::No);
         restrict(&parent.open_with(name, &options)?)
