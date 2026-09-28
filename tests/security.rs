@@ -211,6 +211,8 @@ fn rejects_understated_zip_size() {
 }
 fn make_claude(f: &Fixture) -> PathBuf {
     let cwd = f.root.to_string_lossy();
+    // Agent records use normal Windows paths, not canonicalize()'s verbatim prefix.
+    let cwd = cwd.strip_prefix(r"\\?\").unwrap_or(&cwd);
     let slug: String = cwd
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })

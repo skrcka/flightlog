@@ -253,7 +253,63 @@ pub fn quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
-/// Set a protected owner/system DACL on Windows before sensitive bytes are written.
+/// Obtain an explicit user/system DACL, rather than relying on OWNER RIGHTS
+/// (new objects may have an administrator group as their owner).
+#[cfg(windows)]
+fn private_sddl() -> Result<Vec<u16>> {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use std::ptr::null_mut;
+    use windows_sys::Win32::{
+        Foundation::LocalFree,
+        Security::{
+            Authorization::ConvertSidToStringSidW, GetTokenInformation, TokenUser, TOKEN_QUERY,
+            TOKEN_USER,
+        },
+        System::Threading::{GetCurrentProcess, OpenProcessToken},
+    };
+    // SAFETY: token handle ownership is transferred to OwnedHandle; the query
+    // buffer is usize-aligned and stays live while its embedded SID is used.
+    unsafe {
+        let mut raw = null_mut();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut raw) == 0 {
+            return Err(std::io::Error::last_os_error()).context("query current Windows user");
+        }
+        let token = OwnedHandle::from_raw_handle(raw);
+        let mut len = 0;
+        GetTokenInformation(token.as_raw_handle(), TokenUser, null_mut(), 0, &mut len);
+        if (len as usize) < std::mem::size_of::<TOKEN_USER>() {
+            bail!("cannot size Windows user token");
+        }
+        let mut buffer = vec![0usize; (len as usize).div_ceil(std::mem::size_of::<usize>())];
+        if GetTokenInformation(
+            token.as_raw_handle(),
+            TokenUser,
+            buffer.as_mut_ptr().cast(),
+            len,
+            &mut len,
+        ) == 0
+        {
+            return Err(std::io::Error::last_os_error()).context("read current Windows user");
+        }
+        let user = &*buffer.as_ptr().cast::<TOKEN_USER>();
+        let mut text = null_mut();
+        if ConvertSidToStringSidW(user.User.Sid, &mut text) == 0 {
+            return Err(std::io::Error::last_os_error()).context("format Windows user SID");
+        }
+        // ConvertSidToStringSidW returns a NUL-terminated, LocalFree-owned string.
+        let mut length = 0;
+        while *text.add(length) != 0 {
+            length += 1;
+        }
+        let sid = String::from_utf16_lossy(std::slice::from_raw_parts(text, length));
+        LocalFree(text.cast());
+        Ok(format!("D:P(A;;FA;;;SY)(A;;FA;;;{sid})\0")
+            .encode_utf16()
+            .collect())
+    }
+}
+
+/// Set a protected current-user/system DACL before sensitive bytes are written.
 #[cfg(windows)]
 fn restrict(file: &impl std::os::windows::io::AsRawHandle) -> Result<()> {
     use std::ptr::{null, null_mut};
@@ -272,7 +328,12 @@ fn restrict(file: &impl std::os::windows::io::AsRawHandle) -> Result<()> {
             FILE_SHARE_WRITE,
         },
     };
-    let sddl: Vec<u16> = "D:P(A;;FA;;;SY)(A;;FA;;;OW)\0".encode_utf16().collect();
+    static SDDL: std::sync::OnceLock<std::result::Result<Vec<u16>, String>> =
+        std::sync::OnceLock::new();
+    let sddl = SDDL
+        .get_or_init(|| private_sddl().map_err(|e| format!("{e:#}")))
+        .as_ref()
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
     let mut descriptor = null_mut();
     // SAFETY: valid NUL-terminated UTF-16; returned allocation remains live until LocalFree.
     unsafe {
@@ -283,7 +344,7 @@ fn restrict(file: &impl std::os::windows::io::AsRawHandle) -> Result<()> {
             null_mut(),
         ) == 0
         {
-            return Err(std::io::Error::last_os_error().into());
+            return Err(std::io::Error::last_os_error()).context("construct private Windows DACL");
         }
         let mut present = 0;
         let mut defaulted = 0;
@@ -302,8 +363,9 @@ fn restrict(file: &impl std::os::windows::io::AsRawHandle) -> Result<()> {
             FILE_FLAG_BACKUP_SEMANTICS,
         );
         if writable == INVALID_HANDLE_VALUE {
+            let error = std::io::Error::last_os_error();
             LocalFree(descriptor);
-            return Err(std::io::Error::last_os_error().into());
+            return Err(error).context("reopen file for private Windows permissions");
         }
         let status = SetSecurityInfo(
             writable,
@@ -317,7 +379,8 @@ fn restrict(file: &impl std::os::windows::io::AsRawHandle) -> Result<()> {
         CloseHandle(writable);
         LocalFree(descriptor);
         if status != 0 {
-            return Err(std::io::Error::from_raw_os_error(status as i32).into());
+            return Err(std::io::Error::from_raw_os_error(status as i32))
+                .context("apply private Windows permissions");
         }
     }
     Ok(())
