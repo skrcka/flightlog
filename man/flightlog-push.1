@@ -1,0 +1,24 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH flightlog-push 1 2026-09-28 "flightlog 0.2.2" "flightlog manual"
+.SH NAME
+flightlog\-push \- Upload a bundle to a presigned URL (validated first)
+.SH SYNOPSIS
+\fBflightlog push\fR [\fB\-\-url\fR] [\fB\-\-url\-file\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR>
+.SH DESCRIPTION
+Upload a bundle to a presigned URL (validated first)
+.SH OPTIONS
+.TP
+\fB\-\-url\fR \fI<URL>\fR
+Presigned upload URL (HTTP PUT)
+.TP
+\fB\-\-url\-file\fR \fI<URL_FILE>\fR
+Read the signed URL from a private file, or \- for stdin
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIFILE\fR>
+The .flightlog.zip
+.SH SEE ALSO
+.BR flightlog (1)

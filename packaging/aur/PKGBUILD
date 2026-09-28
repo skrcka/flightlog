@@ -1,0 +1,22 @@
+# Maintainer: flightlog authors <https://github.com/skrcka/flightlog>
+pkgname=flightlog-bin
+pkgver=0.2.1
+pkgrel=1
+pkgdesc="Record coding-agent sessions as portable, redacted, resumable bundles"
+arch=('x86_64' 'aarch64')
+url="https://flightlog.sh"
+license=('MIT' 'Apache-2.0')
+provides=('flightlog')
+conflicts=('flightlog')
+options=('!strip' '!debug')
+source_x86_64=("flightlog-$pkgver-x86_64.tar.gz::https://github.com/skrcka/flightlog/releases/download/v$pkgver/flightlog-x86_64-unknown-linux-musl.tar.gz")
+source_aarch64=("flightlog-$pkgver-aarch64.tar.gz::https://github.com/skrcka/flightlog/releases/download/v$pkgver/flightlog-aarch64-unknown-linux-musl.tar.gz")
+sha256sums_x86_64=('eac2a6802b7b43092980b669a6081f6a7322b4c2bcc5b231d93590df86886fff')
+sha256sums_aarch64=('01fe82fc4e253f8fbca105009e3145eb5131981886bb864077796ad4699cef2d')
+
+package() {
+  install -Dm755 flightlog "$pkgdir/usr/bin/flightlog"
+  install -Dm644 -t "$pkgdir/usr/share/man/man1" man/*.1
+  install -Dm644 LICENSE-MIT "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+  install -Dm644 LICENSE-APACHE "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
+}

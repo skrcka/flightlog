@@ -1,0 +1,16 @@
+{
+  "name": "flightlog",
+  "interface": {
+    "displayName": "flightlog"
+  },
+  "plugins": [
+    {
+      "name": "flightlog",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "category": "developer-tools"
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH flightlog-export 1 2026-09-28 "flightlog 0.2.2" "flightlog manual"
+.SH NAME
+flightlog\-export \- Export a session to a redacted .flightlog.zip
+.SH SYNOPSIS
+\fBflightlog export\fR [\fB\-\-tool\fR] [\fB\-\-session\fR] [\fB\-\-cwd\fR] [\fB\-\-summary\fR] [\fB\-\-goal\fR] [\fB\-\-state\fR] [\fB\-o\fR|\fB\-\-output\fR] [\fB\-\-no\-native\fR] [\fB\-\-reviewed\fR] [\fB\-\-include\-metadata\fR] [\fB\-h\fR|\fB\-\-help\fR]
+.SH DESCRIPTION
+Export a session to a redacted .flightlog.zip.
+.PP
+Picks the newest session recorded for the directory (any tool) unless \-\-tool or \-\-session say otherwise. Prints the redaction report, then the file\*(Aqs size and SHA\-256. Review the report before sharing the bundle.
+.SH OPTIONS
+.TP
+\fB\-\-tool\fR \fI<TOOL>\fR
+Tool the session belongs to [default: whichever has the newest session]
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+claude: Claude Code
+.IP \(bu 2
+codex: OpenAI Codex CLI
+.IP \(bu 2
+opencode: opencode
+.IP \(bu 2
+gemini: Gemini CLI
+.IP \(bu 2
+cursor: Cursor CLI (cursor\-agent) and the Cursor editor
+.RE
+.TP
+\fB\-\-session\fR \fI<ID>\fR
+Session id [default: the newest session for the directory]
+.TP
+\fB\-\-cwd\fR \fI<DIR>\fR
+Directory the session ran in [default: current directory]
+.TP
+\fB\-o\fR, \fB\-\-output\fR \fI<FILE>\fR
+Output file [default: <session>.flightlog.zip]
+.TP
+\fB\-\-no\-native\fR
+Leave out the tool\*(Aqs own session files: readable, but not resumable
+.TP
+\fB\-\-reviewed\fR
+Record in the bundle that a person reviewed the redaction report
+.TP
+\fB\-\-include\-metadata\fR
+Include working directory and Git metadata (may identify private projects)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH SUMMARY
+.TP
+\fB\-\-summary\fR \fI<FILE>\fR
+Summary as JSON: {goal, state, decisions, open_questions, next_steps, files_touched}
+.TP
+\fB\-\-goal\fR \fI<TEXT>\fR
+What the session set out to do (instead of \-\-summary)
+.TP
+\fB\-\-state\fR \fI<TEXT>\fR
+Where it stands now (instead of \-\-summary)
+.SH EXTRA
+Examples:
+  flightlog export \-\-goal \*(AqMigrate auth to OIDC\*(Aq \-\-state \*(AqLogin works; logout TODO\*(Aq
+  flightlog export \-\-summary summary.json \-\-reviewed \-o handoff.flightlog.zip
+  flightlog export \-\-tool codex \-\-session <id> \-\-no\-native
+.SH SEE ALSO
+.BR flightlog (1)

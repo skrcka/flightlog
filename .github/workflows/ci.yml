@@ -1,0 +1,74 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+    inputs:
+      publication:
+        type: boolean
+        default: false
+    secrets:
+      PRIVATE_REFERENCE_TERMS:
+        required: false
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - if: runner.os == 'Linux'
+        name: man pages are up to date
+        run: |
+          cargo run --locked -q -- man --dir man
+          git diff --exit-code -- man
+      - if: runner.os != 'Windows'
+        run: sh -n install.sh
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/install.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors; exit 1 }
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - run: cargo install cargo-audit --locked --version 0.22.2
+      - run: cargo audit
+      - run: python3 scripts/check-secrets.py
+      - name: source publication policy
+        env:
+          PRIVATE_REFERENCE_TERMS: ${{ secrets.PRIVATE_REFERENCE_TERMS }}
+          REQUIRE_POLICY: ${{ inputs.publication }}
+        run: |
+          args=()
+          if [ "$REQUIRE_POLICY" = true ]; then args+=(--require-policy); fi
+          python3 scripts/check-publication.py "${args[@]}"
+      - name: package and check publication contents
+        env:
+          PRIVATE_REFERENCE_TERMS: ${{ secrets.PRIVATE_REFERENCE_TERMS }}
+          REQUIRE_POLICY: ${{ inputs.publication }}
+        run: |
+          cargo package --locked
+          args=()
+          if [ "$REQUIRE_POLICY" = true ]; then args+=(--require-policy); fi
+          python3 scripts/check-publication.py "${args[@]}" --archive target/package/flightlog-*.crate

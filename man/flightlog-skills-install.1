@@ -1,0 +1,46 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH flightlog-skills-install 1 2026-09-28 "flightlog 0.2.2" "flightlog manual"
+.SH NAME
+flightlog\-skills\-install \- Install the skills for every agent found here, or the ones named
+.SH SYNOPSIS
+\fBflightlog skills install\fR [\fB\-\-agent\fR] [\fB\-\-dir\fR] [\fB\-h\fR|\fB\-\-help\fR]
+.SH DESCRIPTION
+Install the skills for every agent found here, or the ones named.
+.PP
+Always writes ~/.agents/skills (read by opencode, Copilot, Cursor, Gemini CLI and Codex), plus the skill folder of each agent whose config directory exists. Restart the agent afterwards.
+.SH OPTIONS
+.TP
+\fB\-\-agent\fR \fI<AGENT>\fR
+Only these agents (comma\-separated)
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+claude: Claude Code: ~/.claude/skills
+.IP \(bu 2
+codex: Codex: ~/.codex/skills
+.IP \(bu 2
+opencode: opencode: ~/.config/opencode/skills
+.IP \(bu 2
+copilot: GitHub Copilot CLI: ~/.copilot/skills
+.IP \(bu 2
+cursor: Cursor: ~/.cursor/skills
+.IP \(bu 2
+gemini: Gemini CLI: ~/.gemini/skills
+.RE
+.TP
+\fB\-\-dir\fR \fI<DIR>\fR
+Install into this directory instead
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH EXTRA
+Examples:
+  flightlog skills install
+  flightlog skills install \-\-agent claude,codex
+  flightlog skills install \-\-dir .claude/skills      # this project only
+.SH SEE ALSO
+.BR flightlog (1)

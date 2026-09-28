@@ -1,0 +1,139 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+    with:
+      publication: true
+    secrets:
+      PRIVATE_REFERENCE_TERMS: ${{ secrets.PRIVATE_REFERENCE_TERMS }}
+  create-release:
+    needs: checks
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: taiki-e/create-gh-release-action@eba8ea96c86cca8a37f1b56e94b4d13301fba651
+        with:
+          changelog: CHANGELOG.md
+          draft: true
+          branch: '^main$'
+          token: ${{ secrets.GITHUB_TOKEN }}
+  upload-assets:
+    needs: create-release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+      - id: build
+        uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6
+        with:
+          bin: flightlog
+          target: ${{ matrix.target }}
+          archive: flightlog-$target
+          checksum: sha256
+          include: LICENSE-MIT,LICENSE-APACHE,README.md,man
+          dry-run: true
+          dry-run-intended: true
+      - name: inspect archive before any upload
+        shell: bash
+        env:
+          ARCHIVE: ${{ steps.build.outputs.tar || steps.build.outputs.zip }}
+          PRIVATE_REFERENCE_TERMS: ${{ secrets.PRIVATE_REFERENCE_TERMS }}
+        run: python3 scripts/check-publication.py --require-policy --archive "$ARCHIVE"
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-path: ${{ steps.build.outputs.tar || steps.build.outputs.zip }}
+      - name: upload checked assets to draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          ARCHIVE: ${{ steps.build.outputs.tar || steps.build.outputs.zip }}
+          CHECKSUM: ${{ steps.build.outputs.sha256 }}
+        run: gh release upload "$TAG" "$ARCHIVE" "$CHECKSUM" --clobber
+  publish-crate:
+    needs: upload-assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+      - name: publish if registry credential is configured
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -n "$CARGO_REGISTRY_TOKEN" ]; then cargo publish --locked; fi
+  publish-release:
+    needs: [upload-assets, publish-crate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: make checked release public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release edit "$TAG" --draft=false
+  update-homebrew:
+    needs: publish-release
+    runs-on: ubuntu-latest
+    env:
+      HAS_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: formula from the public release checksums
+        if: env.HAS_TAP_TOKEN == 'true'
+        run: packaging/update.sh "${GITHUB_REF_NAME#v}"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        if: env.HAS_TAP_TOKEN == 'true'
+        with:
+          repository: skrcka/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: push formula to the tap
+        if: env.HAS_TAP_TOKEN == 'true'
+        run: |
+          cp packaging/homebrew/flightlog.rb tap/Formula/flightlog.rb
+          cd tap
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "flightlog ${GITHUB_REF_NAME#v}"
+          git push

@@ -1,0 +1,26 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH flightlog-restore 1 2026-09-28 "flightlog 0.2.2" "flightlog manual"
+.SH NAME
+flightlog\-restore \- Put a bundle\*(Aqs session back so its tool can resume it
+.SH SYNOPSIS
+\fBflightlog restore\fR [\fB\-\-cwd\fR] [\fB\-\-force\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR>
+.SH DESCRIPTION
+Put a bundle\*(Aqs session back so its tool can resume it.
+.PP
+Writes the tool\*(Aqs own session files where it looks for them (never overwriting without \-\-force) and prints the command to run: claude \-\-resume, codex resume, opencode import, gemini \-\-resume or cursor\-agent \-\-resume. Paths inside a session are absolute, so resume in a directory holding the same repository.
+.SH OPTIONS
+.TP
+\fB\-\-cwd\fR \fI<DIR>\fR
+Directory to resume in [default: current directory]
+.TP
+\fB\-\-force\fR
+Overwrite session files that already exist
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+<\fIFILE\fR>
+The .flightlog.zip
+.SH SEE ALSO
+.BR flightlog (1)

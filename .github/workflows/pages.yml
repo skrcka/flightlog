@@ -1,0 +1,37 @@
+name: pages
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "install.sh", "install.ps1", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: check publication policy
+        env:
+          PRIVATE_REFERENCE_TERMS: ${{ secrets.PRIVATE_REFERENCE_TERMS }}
+        run: python3 scripts/check-publication.py --require-policy
+      - run: cp install.sh install.ps1 site/
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e

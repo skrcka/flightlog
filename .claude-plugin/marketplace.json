@@ -1,0 +1,14 @@
+{
+  "name": "flightlog",
+  "owner": {
+    "name": "flightlog authors"
+  },
+  "description": "Skills for exporting and importing coding-agent sessions with flightlog",
+  "plugins": [
+    {
+      "name": "flightlog",
+      "source": "./",
+      "description": "Export the current coding-agent session as a portable, redacted bundle, and import or resume one."
+    }
+  ]
+}

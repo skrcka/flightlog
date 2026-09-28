@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "flightlog",
+  "version": "0.2.2",
+  "description": "Export the current coding-agent session as a portable, redacted flightlog bundle, and import or resume one.",
+  "homepage": "https://flightlog.sh",
+  "license": "MIT OR Apache-2.0",
+  "author": {
+    "name": "flightlog authors",
+    "url": "https://github.com/skrcka/flightlog"
+  }
+}

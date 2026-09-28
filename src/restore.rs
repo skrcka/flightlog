@@ -1,0 +1,183 @@
+//! Restore only known layouts into locally selected agent session roots.
+use crate::{
+    bundle::Bundle,
+    safe_fs,
+    sources::{self, cursor, gemini},
+};
+use anyhow::{bail, Context, Result};
+use std::path::{Path, PathBuf};
+pub struct Restored {
+    pub written: Vec<PathBuf>,
+    pub next: String,
+}
+
+pub fn restore(b: &Bundle, cwd: &str, work_dir: &Path, force: bool) -> Result<Restored> {
+    let native = &b.manifest["native"];
+    let id = b.manifest["source"]["session_id"]
+        .as_str()
+        .context("missing session id")?;
+    if !safe_fs::identifier(id) {
+        bail!("invalid session id");
+    }
+    let layout = native["layout"]
+        .as_str()
+        .context("bundle is not resumable")?;
+    let tool = b.manifest["source"]["tool"].as_str().unwrap_or("");
+    let files: Vec<_> = b
+        .files
+        .iter()
+        .filter(|(n, _)| n.starts_with("native/"))
+        .collect();
+    if files.is_empty() {
+        bail!("bundle has no native files");
+    }
+    let expected = match layout {
+        cursor::CLI_LAYOUT => "cursor",
+        "opencode/export-v1" => "opencode",
+        "claude_code/projects-v1" => "claude_code",
+        "codex/rollout-v1" => "codex",
+        "gemini-cli/chats-v1" => "gemini_cli",
+        _ => bail!("unsupported native layout"),
+    };
+    if tool != expected || native["tool"] != expected {
+        bail!("native tool/layout mismatch");
+    }
+    if layout == cursor::CLI_LAYOUT {
+        if files.len() != 1 || files[0].0 != &format!("native/{id}.cursor-store.json") {
+            bail!("unexpected Cursor native files");
+        }
+        let dir = cursor::restore_cli(files[0].1, id, cwd, force)?;
+        return Ok(Restored {
+            written: vec![dir.join("store.db"), dir.join("meta.json")],
+            next: format!("cursor-agent --resume {id}"),
+        });
+    }
+    if layout == "opencode/export-v1" {
+        if files.len() != 1 || files[0].0 != &format!("native/{id}.json") {
+            bail!("unexpected opencode native files");
+        }
+        uuid::Uuid::parse_str(b.manifest["bundle_id"].as_str().unwrap_or(""))?;
+        let dest = work_dir.join(format!("{id}.json"));
+        safe_fs::write(&dest, files[0].1, force)?;
+        #[cfg(not(windows))]
+        let next = format!(
+            "opencode import {}",
+            safe_fs::quote(&dest.to_string_lossy())
+        );
+        #[cfg(windows)]
+        let next = format!(
+            "opencode import (file argument: {})",
+            safe_fs::display(&dest)
+        );
+        return Ok(Restored {
+            written: vec![dest],
+            next,
+        });
+    }
+    let entries = native["entries"]
+        .as_array()
+        .context("missing native entries")?;
+    if entries.len() != files.len() {
+        bail!("native entries must account for every native file");
+    }
+    let mut plan = Vec::new();
+    let mut registration = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for e in entries {
+        let name = e["path"].as_str().context("missing native path")?;
+        if !seen.insert(name) {
+            bail!("duplicate native path");
+        }
+        let rel = name
+            .strip_prefix("native/")
+            .context("native path outside native/")?;
+        if !safe_fs::safe_relative(rel) {
+            bail!("unsafe native path");
+        }
+        let bytes = b.files.get(name).context("missing native file")?;
+        let template = e["restore_to"]
+            .as_str()
+            .context("missing destination template")?;
+        let dest = match layout {
+            "claude_code/projects-v1" => {
+                if rel != format!("{id}.jsonl") && !rel.starts_with(&format!("{id}/")) {
+                    bail!("native file does not belong to the session");
+                }
+                if template != format!("~/.claude/projects/{{cwd_slug}}/{rel}") {
+                    bail!("unexpected destination template");
+                }
+                sources::claude::projects_dir()
+                    .join(sources::cwd_slug(cwd))
+                    .join(rel)
+            }
+            "codex/rollout-v1" => {
+                let target = template
+                    .strip_prefix("~/.codex/sessions/")
+                    .context("unexpected destination template")?;
+                let parts: Vec<_> = target.split('/').collect();
+                if !safe_fs::safe_relative(target)
+                    || parts.len() != 4
+                    || parts[0].len() != 4
+                    || parts[1].len() != 2
+                    || parts[2].len() != 2
+                    || !parts[..3]
+                        .iter()
+                        .all(|s| s.bytes().all(|c| c.is_ascii_digit()))
+                    || parts[3] != rel
+                    || !rel.starts_with("rollout-")
+                    || !rel.ends_with(&format!("{id}.jsonl"))
+                    || files.len() != 1
+                {
+                    bail!("invalid Codex session layout");
+                }
+                sources::codex::codex_home().join("sessions").join(target)
+            }
+            "gemini-cli/chats-v1" => {
+                if rel.contains('/')
+                    || !rel.starts_with("session-")
+                    || !(rel.ends_with(".jsonl") || rel.ends_with(".json"))
+                    || files.len() != 1
+                    || template != format!("~/.gemini/tmp/{{gemini_project}}/chats/{rel}")
+                {
+                    bail!("invalid Gemini session layout");
+                }
+                // Resolve registration only after all untrusted structure is checked.
+                let project = gemini::project_for_restore(cwd)?;
+                if !safe_fs::identifier(&project.name) {
+                    bail!("invalid Gemini project identifier");
+                }
+                registration = project.writes;
+                gemini::gemini_home()
+                    .join("tmp")
+                    .join(project.name)
+                    .join("chats")
+                    .join(rel)
+            }
+            _ => unreachable!(),
+        };
+        safe_fs::check_destination(&dest, force)?;
+        plan.push((dest, bytes));
+    }
+    let mut written = Vec::new();
+    // Check every parent before writing session data or registration files.
+    for (dest, _) in &plan {
+        safe_fs::dir(dest.parent().context("missing destination parent")?)?;
+    }
+    for (dest, _, replace) in &registration {
+        safe_fs::check_destination(dest, *replace)?;
+        safe_fs::dir(dest.parent().context("missing registration parent")?)?;
+    }
+    for (dest, bytes) in plan {
+        safe_fs::write(&dest, bytes, force)?;
+        written.push(dest);
+    }
+    for (dest, bytes, replace) in registration {
+        safe_fs::write(&dest, &bytes, replace)?;
+    }
+    let next = match tool {
+        "claude_code" => format!("claude --resume {id}"),
+        "codex" => format!("codex resume {id}"),
+        _ => format!("gemini --resume {id}"),
+    };
+    Ok(Restored { written, next })
+}

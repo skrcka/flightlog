@@ -1,0 +1,18 @@
+{
+  "name": "flightlog",
+  "displayName": "flightlog",
+  "version": "0.2.0",
+  "description": "Export the current coding-agent session as a portable, redacted bundle, and import or resume one.",
+  "author": {
+    "name": "flightlog authors"
+  },
+  "homepage": "https://flightlog.sh",
+  "repository": "https://github.com/skrcka/flightlog",
+  "license": "MIT OR Apache-2.0",
+  "keywords": [
+    "session",
+    "context",
+    "export",
+    "atif"
+  ]
+}

@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic detector fixtures only"
+condition = "AND"
+paths = ['''^src/redact\.rs$''']
+regexTarget = "line"
+regexes = ['''AKIAABCDEFGHIJKLMNOP''', '''STRIPE_SECRET_KEY=abcdefgh12345''']

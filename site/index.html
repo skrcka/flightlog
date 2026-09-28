@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>flightlog</title>
+<meta name="description" content="Record a coding-agent session (Claude Code, Codex, opencode, Gemini CLI, Cursor) as a portable, redacted bundle and resume it later.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23e8590c'/><path d='M8 20l8-9 8 9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<style>
+  :root {
+    --bg: #fbfaf7; --fg: #1c1b19; --muted: #5f5c55; --line: #e4e0d8;
+    --card: #ffffff; --code: #f2efe8; --accent: #c2410c; --accent-fg: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141312; --fg: #eeeae3; --muted: #a39f97; --line: #2c2a27;
+      --card: #1b1a18; --code: #211f1d; --accent: #fb923c; --accent-fg: #1c1b19;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 72px 16px 96px; }
+  h1 { font-size: clamp(34px, 6vw, 48px); line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 16px; }
+  h1 span { color: var(--accent); }
+  .lede { font-size: 19px; color: var(--muted); margin: 0 0 32px; max-width: 620px; }
+  .install { display: flex; align-items: stretch; border: 1px solid var(--line);
+    background: var(--card); border-radius: 10px; overflow: hidden; }
+  .install code { flex: 1; padding: 14px 16px; overflow-x: auto; white-space: nowrap;
+    font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .install button { border: 0; border-left: 1px solid var(--line); background: var(--accent);
+    color: var(--accent-fg); font-weight: 600; padding: 0 18px; cursor: pointer; font-size: 14px; }
+  .install button:focus-visible { outline: 2px solid var(--fg); outline-offset: -4px; }
+  .os { display: flex; gap: 4px; margin: 0 0 8px; }
+  .os button { border: 1px solid var(--line); background: transparent; color: var(--muted);
+    border-radius: 999px; padding: 3px 12px; font-size: 13px; cursor: pointer; }
+  .os button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .os button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .alt { color: var(--muted); font-size: 14px; margin: 10px 0 48px; }
+  .alt a { color: inherit; }
+  pre { background: var(--code); border-radius: 10px; padding: 16px; overflow-x: auto;
+    font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0 0 40px; }
+  pre .c { color: var(--muted); }
+  h2 { font-size: 20px; margin: 48px 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  footer { margin-top: 64px; color: var(--muted); font-size: 14px; }
+  footer a { color: inherit; }
+  code.i { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>flight<span>log</span></h1>
+  <p class="lede">Record a coding-agent session as a portable, redacted bundle.
+    Hand it to a colleague or another agent, attach it to a ticket, and resume it
+    later in Claude Code, Codex, opencode, Gemini CLI or Cursor.</p>
+
+  <div class="os" role="group" aria-label="Operating system">
+    <button type="button" data-os="unix" aria-pressed="true">macOS / Linux</button>
+    <button type="button" data-os="windows" aria-pressed="false">Windows</button>
+  </div>
+  <div class="install">
+    <code id="cmd">curl -fsSL https://flightlog.sh/install.sh | sh</code>
+    <button id="copy" type="button" aria-label="Copy install command">Copy</button>
+  </div>
+  <p class="alt">macOS, Linux and Windows, x86-64 and arm64. Or <code class="i">brew install skrcka/tap/flightlog</code> ·
+    <a href="https://github.com/skrcka/flightlog">GitHub</a> · <a href="https://github.com/skrcka/flightlog/blob/main/SPEC.md">format spec</a></p>
+
+<pre><span class="c"># the newest session in this directory → one file</span>
+flightlog export
+<span class="c"># claude_code session df9d8089…: 2167 steps, 32 native files, 11.1 MB
+# redaction (review before sharing):
+#   [REDACTED:password:1]   ×534  trajectory.json, native/…</span>
+
+<span class="c"># what's inside</span>
+flightlog inspect df9d8089….flightlog.zip
+
+<span class="c"># back on any machine with the same repo checked out</span>
+flightlog restore df9d8089….flightlog.zip
+<span class="c"># now run: claude --resume df9d8089…</span></pre>
+
+  <h2>What you get</h2>
+  <div class="grid">
+    <div class="card"><h3>Open format</h3><p>The conversation is ATIF v1.8, the Agent Trajectory Interchange Format, inside a small manifest with a summary and checksums.</p></div>
+    <div class="card"><h3>Redacted first</h3><p>Keys, tokens, private keys and passwords become stable placeholders. You see the report before anything is shared.</p></div>
+    <div class="card"><h3>Resumable</h3><p>The tool's own session files come along, so the same session continues where it stopped.</p></div>
+    <div class="card"><h3>One binary</h3><p>A single static executable. No Python, no Node, nothing to configure.</p></div>
+  </div>
+
+  <h2>Works with</h2>
+  <p>Claude Code, Codex, opencode, Gemini CLI and Cursor (CLI and editor), on macOS, Linux and Windows.
+    Bundles upload to any presigned URL.</p>
+
+  <h2>Teach your agent</h2>
+  <p>Two skills tell an agent how to save its session and how to pick one up again.</p>
+<pre>flightlog skills install     <span class="c"># Claude Code, Codex, opencode, Copilot, Cursor, Gemini CLI</span>
+
+<span class="c"># or as a plugin</span>
+claude plugin marketplace add skrcka/flightlog
+codex plugin marketplace add skrcka/flightlog
+gemini extensions install https://github.com/skrcka/flightlog</pre>
+  <p class="alt">The bundle format is open: <a href="https://github.com/skrcka/flightlog/blob/main/SPEC.md">SPEC.md</a>,
+    with the conversation in <a href="https://github.com/harbor-framework/harbor/blob/main/rfcs/0001-trajectory-format.md">ATIF v1.8</a>.</p>
+
+  <footer>MIT OR Apache-2.0 · <a href="https://github.com/skrcka/flightlog">github.com/skrcka/flightlog</a></footer>
+</main>
+<script>
+  const cmds = {
+    unix: 'curl -fsSL https://flightlog.sh/install.sh | sh',
+    windows: 'irm https://flightlog.sh/install.ps1 | iex',
+  };
+  const osButtons = document.querySelectorAll('.os button');
+  function pick(os) {
+    document.getElementById('cmd').textContent = cmds[os];
+    osButtons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.os === os)));
+  }
+  osButtons.forEach(b => b.addEventListener('click', () => pick(b.dataset.os)));
+  if (/Windows/i.test(navigator.userAgent)) pick('windows');
+  const btn = document.getElementById('copy');
+  btn.addEventListener('click', async () => {
+    const text = document.getElementById('cmd').textContent;
+    try { await navigator.clipboard.writeText(text); }
+    catch {
+      const r = document.createRange(); r.selectNodeContents(document.getElementById('cmd'));
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand('copy'); s.removeAllRanges();
+    }
+    btn.textContent = 'Copied';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1600);
+  });
+</script>
+</body>
+</html>

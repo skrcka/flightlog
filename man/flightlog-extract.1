@@ -1,0 +1,21 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH flightlog-extract 1 2026-09-28 "flightlog 0.2.2" "flightlog manual"
+.SH NAME
+flightlog\-extract \- Unpack a bundle into a directory (the conversation is trajectory.json)
+.SH SYNOPSIS
+\fBflightlog extract\fR [\fB\-o\fR|\fB\-\-output\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR>
+.SH DESCRIPTION
+Unpack a bundle into a directory (the conversation is trajectory.json)
+.SH OPTIONS
+.TP
+\fB\-o\fR, \fB\-\-output\fR \fI<DIR>\fR
+Target directory [default: the file name without .zip]
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIFILE\fR>
+The .flightlog.zip
+.SH SEE ALSO
+.BR flightlog (1)

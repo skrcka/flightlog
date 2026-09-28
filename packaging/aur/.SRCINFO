@@ -1,0 +1,19 @@
+pkgbase = flightlog-bin
+	pkgdesc = Record coding-agent sessions as portable, redacted, resumable bundles
+	pkgver = 0.2.1
+	pkgrel = 1
+	url = https://flightlog.sh
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	license = Apache-2.0
+	provides = flightlog
+	conflicts = flightlog
+	options = !strip
+	options = !debug
+	source_x86_64 = flightlog-0.2.1-x86_64.tar.gz::https://github.com/skrcka/flightlog/releases/download/v0.2.1/flightlog-x86_64-unknown-linux-musl.tar.gz
+	sha256sums_x86_64 = eac2a6802b7b43092980b669a6081f6a7322b4c2bcc5b231d93590df86886fff
+	source_aarch64 = flightlog-0.2.1-aarch64.tar.gz::https://github.com/skrcka/flightlog/releases/download/v0.2.1/flightlog-aarch64-unknown-linux-musl.tar.gz
+	sha256sums_aarch64 = 01fe82fc4e253f8fbca105009e3145eb5131981886bb864077796ad4699cef2d
+
+pkgname = flightlog-bin
