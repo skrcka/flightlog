@@ -66,6 +66,17 @@ fn builder() -> DirBuilder {
 }
 /// Walk each component through an open directory handle. Never follow a link.
 pub fn dir(path: &Path) -> Result<Dir> {
+    if crate::bypass::get().skip_path_checks {
+        let mut builder = std::fs::DirBuilder::new();
+        builder.recursive(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(path)?;
+        return Ok(Dir::open_ambient_dir(path, cap_std::ambient_authority())?);
+    }
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -107,6 +118,10 @@ pub fn dir(path: &Path) -> Result<Dir> {
     Ok(d)
 }
 pub fn check_destination(path: &Path, force: bool) -> Result<()> {
+    let force = force || crate::bypass::get().overwrite;
+    if crate::bypass::get().skip_path_checks && force {
+        return Ok(());
+    }
     match std::fs::symlink_metadata(path) {
         Ok(m) if !m.is_file() || m.file_type().is_symlink() || !force => {
             bail!("destination exists or is unsafe: {}", display(path))
@@ -117,7 +132,37 @@ pub fn check_destination(path: &Path, force: bool) -> Result<()> {
     }
 }
 pub fn write(path: &Path, bytes: &[u8], force: bool) -> Result<()> {
+    let force = force || crate::bypass::get().overwrite;
     check_destination(path, force)?;
+    if crate::bypass::get().skip_path_checks {
+        dir(path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new(".")))?;
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true);
+        if force {
+            opts.create(true).truncate(true);
+        } else {
+            opts.create_new(true);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        let mut file = opts.open(path)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // mode(0600) only applies at creation; tighten an existing target too.
+            file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        }
+        restrict(&file)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        return Ok(());
+    }
     let parent = dir(path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -150,6 +195,21 @@ pub fn write(path: &Path, bytes: &[u8], force: bool) -> Result<()> {
     result
 }
 pub fn read(path: &Path, max: usize) -> Result<Vec<u8>> {
+    let max = if crate::bypass::get().skip_size_checks {
+        usize::MAX
+    } else {
+        max
+    };
+    if crate::bypass::get().skip_path_checks {
+        let file = std::fs::File::open(path)?;
+        let mut bytes = Vec::new();
+        file.take((max as u64).saturating_add(1))
+            .read_to_end(&mut bytes)?;
+        if bytes.len() > max {
+            bail!("input exceeds size limit");
+        }
+        return Ok(bytes);
+    }
     let meta = std::fs::symlink_metadata(path)?;
     if !meta.is_file() || meta.file_type().is_symlink() {
         bail!("input must be a regular file");
@@ -165,7 +225,8 @@ pub fn read(path: &Path, max: usize) -> Result<Vec<u8>> {
     opts.read(true).follow(FollowSymlinks::No);
     let file = parent.open_with(path.file_name().context("input needs a filename")?, &opts)?;
     let mut bytes = Vec::new();
-    file.take(max as u64 + 1).read_to_end(&mut bytes)?;
+    file.take((max as u64).saturating_add(1))
+        .read_to_end(&mut bytes)?;
     if bytes.len() > max {
         bail!("input exceeds size limit");
     }

@@ -12,11 +12,13 @@ pub struct Restored {
 }
 
 pub fn restore(b: &Bundle, cwd: &str, work_dir: &Path, force: bool) -> Result<Restored> {
+    let options = crate::bypass::get();
+    let force = force || options.overwrite;
     let native = &b.manifest["native"];
     let id = b.manifest["source"]["session_id"]
         .as_str()
         .context("missing session id")?;
-    if !safe_fs::identifier(id) {
+    if !options.skip_path_checks && !safe_fs::identifier(id) {
         bail!("invalid session id");
     }
     let layout = native["layout"]
@@ -37,26 +39,40 @@ pub fn restore(b: &Bundle, cwd: &str, work_dir: &Path, force: bool) -> Result<Re
         "claude_code/projects-v1" => "claude_code",
         "codex/rollout-v1" => "codex",
         "gemini-cli/chats-v1" => "gemini_cli",
+        _ if options.skip_format_checks && options.skip_path_checks => tool,
         _ => bail!("unsupported native layout"),
     };
-    if tool != expected || native["tool"] != expected {
+    if !options.skip_format_checks && (tool != expected || native["tool"] != expected) {
         bail!("native tool/layout mismatch");
     }
+    if options.skip_path_checks && !matches!(layout, cursor::CLI_LAYOUT | "opencode/export-v1") {
+        return restore_templates(b, cwd, force, files.len());
+    }
     if layout == cursor::CLI_LAYOUT {
-        if files.len() != 1 || files[0].0 != &format!("native/{id}.cursor-store.json") {
+        if !options.skip_format_checks
+            && (files.len() != 1 || files[0].0 != &format!("native/{id}.cursor-store.json"))
+        {
             bail!("unexpected Cursor native files");
         }
         let dir = cursor::restore_cli(files[0].1, id, cwd, force)?;
         return Ok(Restored {
             written: vec![dir.join("store.db"), dir.join("meta.json")],
-            next: format!("cursor-agent --resume {id}"),
+            next: if safe_fs::identifier(id) {
+                format!("cursor-agent --resume {id}")
+            } else {
+                "resume the restored session in Cursor".into()
+            },
         });
     }
     if layout == "opencode/export-v1" {
-        if files.len() != 1 || files[0].0 != &format!("native/{id}.json") {
+        if !options.skip_format_checks
+            && (files.len() != 1 || files[0].0 != &format!("native/{id}.json"))
+        {
             bail!("unexpected opencode native files");
         }
-        uuid::Uuid::parse_str(b.manifest["bundle_id"].as_str().unwrap_or(""))?;
+        if !options.skip_path_checks {
+            uuid::Uuid::parse_str(b.manifest["bundle_id"].as_str().unwrap_or(""))?;
+        }
         let dest = work_dir.join(format!("{id}.json"));
         safe_fs::write(&dest, files[0].1, force)?;
         #[cfg(not(windows))]
@@ -180,4 +196,68 @@ pub fn restore(b: &Bundle, cwd: &str, work_dir: &Path, force: bool) -> Result<Re
         _ => format!("gemini --resume {id}"),
     };
     Ok(Restored { written, next })
+}
+
+/// Explicitly trust destinations, while retaining format/overwrite checks unless
+/// those were independently disabled. Never execute archive commands or SQL.
+fn restore_templates(b: &Bundle, cwd: &str, force: bool, native_count: usize) -> Result<Restored> {
+    let options = crate::bypass::get();
+    let entries = b.manifest["native"]["entries"]
+        .as_array()
+        .filter(|entries| !entries.is_empty())
+        .context("missing native entries")?;
+    if !options.skip_format_checks && entries.len() != native_count {
+        bail!("native entries must account for every native file");
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    let mut plan = Vec::new();
+    let mut registration = Vec::new();
+    let mut gemini_project = None;
+    for entry in entries {
+        let name = entry["path"].as_str().context("missing native path")?;
+        if !options.skip_format_checks && (!name.starts_with("native/") || !seen.insert(name)) {
+            bail!("invalid or duplicate native path");
+        }
+        let bytes = b.files.get(name).context("missing native file")?;
+        let mut target = entry["restore_to"]
+            .as_str()
+            .context("missing destination")?
+            .replace("{cwd_slug}", &sources::cwd_slug(cwd));
+        if target.contains("{gemini_project}") {
+            if gemini_project.is_none() {
+                let project = gemini::project_for_restore(cwd)?;
+                registration = project.writes;
+                gemini_project = Some(project.name);
+            }
+            target = target.replace("{gemini_project}", gemini_project.as_deref().unwrap());
+        }
+        let dest = if let Some(rel) = target.strip_prefix("~/.codex/") {
+            sources::codex::codex_home().join(rel)
+        } else if let Some(rel) = target.strip_prefix("~/.claude/projects/") {
+            sources::claude::projects_dir().join(rel)
+        } else if let Some(rel) = target.strip_prefix("~/.gemini/") {
+            gemini::gemini_home().join(rel)
+        } else if let Some(rel) = target.strip_prefix("~/") {
+            sources::home().join(rel)
+        } else {
+            PathBuf::from(target)
+        };
+        safe_fs::check_destination(&dest, force)?;
+        plan.push((dest, bytes));
+    }
+    for (dest, _, replace) in &registration {
+        safe_fs::check_destination(dest, *replace)?;
+    }
+    let mut written = Vec::new();
+    for (dest, bytes) in plan {
+        safe_fs::write(&dest, bytes, force)?;
+        written.push(dest);
+    }
+    for (dest, bytes, replace) in registration {
+        safe_fs::write(&dest, &bytes, replace)?;
+    }
+    Ok(Restored {
+        written,
+        next: "resume the restored session in its original tool".into(),
+    })
 }

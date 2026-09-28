@@ -79,6 +79,7 @@ pub struct Finding {
 
 #[derive(Default)]
 pub struct Redactor {
+    disabled: bool,
     literals: Vec<String>,
     values: HashMap<String, String>,
     per_kind: HashMap<&'static str, usize>,
@@ -86,6 +87,12 @@ pub struct Redactor {
 }
 
 impl Redactor {
+    pub fn disabled() -> Self {
+        Self {
+            disabled: true,
+            ..Self::default()
+        }
+    }
     pub fn configured() -> anyhow::Result<Self> {
         let mut red = Self::default();
         if let Some(path) = std::env::var_os("FLIGHTLOG_REDACT_FILE") {
@@ -108,6 +115,9 @@ impl Redactor {
     }
     /// Parse native JSON/JSONL so escaping cannot hide fields from the redactor.
     pub fn native(&mut self, bytes: &[u8], file: &str) -> anyhow::Result<Vec<u8>> {
+        if self.disabled {
+            return Ok(bytes.to_vec());
+        }
         let text = std::str::from_utf8(bytes).map_err(|_| {
             anyhow::anyhow!("unsupported binary native content; export with --no-native")
         })?;
@@ -230,6 +240,9 @@ impl Redactor {
 
     /// Redact every string in a JSON value.
     pub fn value(&mut self, v: &Value, file: &str) -> Value {
+        if self.disabled {
+            return v.clone();
+        }
         match v {
             Value::String(s) => Value::String(self.text(s, file)),
             Value::Array(a) => Value::Array(a.iter().map(|x| self.value(x, file)).collect()),

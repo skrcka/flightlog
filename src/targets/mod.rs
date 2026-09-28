@@ -3,7 +3,7 @@ use anyhow::{bail, Context, Result};
 use std::{io::Read, path::PathBuf, time::Duration};
 fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
-        .https_only(true)
+        .https_only(!crate::bypass::get().allow_http)
         .redirects(0)
         .timeout_connect(Duration::from_secs(15))
         .timeout_read(Duration::from_secs(30))
@@ -12,7 +12,10 @@ fn agent() -> ureq::Agent {
         .build()
 }
 fn check(url: &str) -> Result<()> {
-    if !url.starts_with("https://") || url.contains(['\r', '\n']) {
+    if !(url.starts_with("https://")
+        || (crate::bypass::get().allow_http && url.starts_with("http://")))
+        || url.contains(['\r', '\n'])
+    {
         bail!("transfer requires an HTTPS URL");
     }
     Ok(())
@@ -22,14 +25,16 @@ pub fn url_input(url: Option<String>, file: Option<PathBuf>) -> Result<String> {
         (Some(u), None) => u,
         (None, Some(p)) if p == std::path::Path::new("-") => {
             let mut s = String::new();
-            std::io::stdin().take(16_385).read_to_string(&mut s)?;
+            std::io::stdin()
+                .take(crate::bypass::limit(16_385))
+                .read_to_string(&mut s)?;
             s
         }
         (None, Some(p)) => String::from_utf8(crate::safe_fs::read(&p, 16_384)?)
             .context("URL file must be UTF-8")?,
         _ => bail!("supply exactly one URL or --url-file"),
     };
-    if text.len() > 16_384 {
+    if !crate::bypass::get().skip_size_checks && text.len() > 16_384 {
         bail!("URL exceeds size limit");
     }
     let text = text.trim().to_string();
@@ -60,10 +65,12 @@ pub fn get(url: &str) -> Result<Vec<u8>> {
     }
     let mut bytes = Vec::new();
     r.into_reader()
-        .take(crate::bundle::MAX_ARCHIVE_BYTES as u64 + 1)
+        .take(crate::bypass::limit(
+            crate::bundle::MAX_ARCHIVE_BYTES as u64 + 1,
+        ))
         .read_to_end(&mut bytes)
         .map_err(|_| anyhow::anyhow!("download interrupted"))?;
-    if bytes.len() > crate::bundle::MAX_ARCHIVE_BYTES {
+    if !crate::bypass::get().skip_size_checks && bytes.len() > crate::bundle::MAX_ARCHIVE_BYTES {
         bail!("download exceeds size limit");
     }
     Ok(bytes)

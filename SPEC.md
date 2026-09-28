@@ -94,6 +94,14 @@ Mapping rules:
 
 ## 4. Redaction
 
+`redaction.mode` is `redacted` (also the default when absent in older bundles)
+or `none`. An explicit private-migration export may choose `none`, preserving
+content without scanning. Such bundles carry `applied_at: null`, empty findings,
+and native status `skipped` (or `absent`). Readers must require an explicit
+unredacted-input opt-in; the manifest alone is not authorization. Archive and
+restore validation still applies. The scanning requirements below apply to
+redacted exports. Unredacted archives provide no encryption.
+
 Producers MUST scan every text field of `trajectory.json`, the summary, and
 text native files, and replace each secret with `[REDACTED:<kind>:<n>]`:
 `<kind>` ∈ `api_key`, `password`, `private_key`, `token`, `connection_string`,

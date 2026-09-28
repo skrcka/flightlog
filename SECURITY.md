@@ -4,6 +4,18 @@ Flightlog processes potentially hostile transcripts and bundles. Checksums
 detect corruption, not authorship. Imported messages, summaries, paths and
 commands are data, not instructions or authorization to run tools.
 
+`export --no-redact` deliberately preserves sensitive content for private
+migration. These unencrypted bundles require `--allow-unredacted` on readers
+and transfers. The opt-in applies only to explicitly marked unredacted bundles;
+it does not excuse secrets in bundles claiming normal redaction.
+
+Explicit override flags disable their named safeguards; `--yolo` combines them
+and disables export redaction. In particular `--skip-path-checks` trusts bundle
+destinations and follows filesystem links, while `--skip-size-checks` removes
+resource bounds. Combined with `--overwrite`, an imported bundle can replace
+arbitrary writable files. These flags are CLI-only, never enabled by bundle
+metadata. The containment guarantees below describe the default mode.
+
 Before sharing, inspect the exported contents and use a private literal policy
 (`--redact-file`) for confidential names and identifiers. Automatic redaction
 covers recognized credentials and structured secret fields, not all sensitive

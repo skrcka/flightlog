@@ -214,7 +214,7 @@ pub fn convert(s: &SessionRef) -> Result<Converted> {
     let mut total = native[0].bytes.len();
     for f in walk(&side) {
         total = total.saturating_add(std::fs::symlink_metadata(&f)?.len() as usize);
-        if total > crate::safe_fs::MAX_FILE_BYTES {
+        if !crate::bypass::get().skip_size_checks && total > crate::safe_fs::MAX_FILE_BYTES {
             anyhow::bail!("native session exceeds size limit");
         }
         let rel = f

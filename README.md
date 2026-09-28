@@ -136,6 +136,42 @@ opencode, Cursor and Gemini CLI also read `~/.agents/skills`, where
 
 ## Privacy and security
 
+For a private migration between your own computers, preserve sensitive content:
+
+```bash
+flightlog export --no-redact -o migration.flightlog.zip
+flightlog restore migration.flightlog.zip --allow-unredacted
+```
+
+The archive is not encrypted. Native files are preserved byte-for-byte by the
+bundler; provider conversion and supported native layouts still apply. Use
+`--include-metadata` if you also want repository and working-directory metadata.
+Unredacted bundles are explicitly marked and require `--allow-unredacted` for
+inspect, validate, extract, restore, push or pull. This option does not disable
+path, checksum, size or overwrite checks. Redaction stays on by default.
+
+For explicit recovery or trusted local data, checks can be disabled separately:
+
+| Option | Effect |
+|---|---|
+| `--no-redact` | Export without changing sensitive content |
+| `--allow-unredacted` | Read a bundle explicitly marked unredacted |
+| `--skip-content-checks` | Skip input secret/opaque-content checks regardless of the marker |
+| `--skip-checksums` | Ignore manifest SHA-256 mismatches |
+| `--skip-format-checks` | Skip bundle schema and file-inventory checks |
+| `--skip-path-checks` | Allow traversal, arbitrary restore destinations and filesystem symlinks |
+| `--skip-size-checks` | Remove Flightlog input, archive, decompression and session-size limits |
+| `--overwrite` | Replace outputs/restore files and merge extraction directories |
+| `--allow-http` | Permit plaintext HTTP transfers |
+| `--yolo` | Enable every override above, including no redaction on export |
+
+All except `--no-redact` are global flags and work before or after the command.
+`--yolo` can overwrite files outside the destination and consume unlimited memory
+or disk. It is not required for ordinary migration; use the two-command example
+above for that. ZIP/JSON decoding and the data needed by a native converter must
+still succeed. No mode executes bundled shell commands or SQL. Network deadlines,
+redirect policy, TLS certificate verification and private file permissions remain.
+
 Redaction is best effort: review extracted contents before sharing. It cannot
 identify every confidential fact or arbitrary encoding. Supply private names,
 domains and tool aliases as one literal per line in a local file:

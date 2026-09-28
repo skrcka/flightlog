@@ -110,6 +110,8 @@ fn pages(cmd: &Command, prefix: &str, out: &mut Vec<(String, Command)>) {
 
 /// Write every page into `dir`; returns the files written.
 pub fn write_all(cli: &Command, dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut cli = cli.clone();
+    cli.build(); // Propagate global flags into each command's own manual page.
     std::fs::create_dir_all(dir)?;
     let mut written = Vec::new();
 
@@ -128,7 +130,7 @@ pub fn write_all(cli: &Command, dir: &Path) -> Result<Vec<PathBuf>> {
     written.push(f);
 
     let mut subs = Vec::new();
-    pages(cli, "flightlog", &mut subs);
+    pages(&cli, "flightlog", &mut subs);
     for (name, c) in subs {
         let mut buf = Vec::new();
         page_for(c).render(&mut buf)?;

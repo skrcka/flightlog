@@ -158,7 +158,9 @@ pub fn list(tool: Tool, cwd: &str) -> Result<Vec<SessionRef>> {
 /// The session to export: the one named, else the newest for `cwd` of the
 /// given tool, else of any tool (newest wins).
 pub fn pick(tool: Option<Tool>, session: Option<&str>, cwd: &str) -> Result<SessionRef> {
-    if session.is_some_and(|id| !crate::safe_fs::identifier(id)) {
+    if !crate::bypass::get().skip_path_checks
+        && session.is_some_and(|id| !crate::safe_fs::identifier(id))
+    {
         bail!("invalid session id");
     }
     let tools: Vec<Tool> = tool.map(|t| vec![t]).unwrap_or_else(|| Tool::ALL.to_vec());
@@ -220,36 +222,50 @@ pub fn blocks_text(content: &Value) -> String {
 
 /// Every file under `dir`, recursively.
 pub fn walk(dir: &Path) -> Vec<PathBuf> {
-    fn visit(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
-        if depth > 16 || out.len() >= 10_000 {
-            return;
+    let options = crate::bypass::get();
+    let mut out = Vec::new();
+    let mut pending = vec![(dir.to_path_buf(), 0)];
+    let mut visited = std::collections::HashSet::new();
+    while let Some((dir, depth)) = pending.pop() {
+        if !options.skip_size_checks && (depth > 16 || out.len() >= 10_000) {
+            continue;
         }
-        if !std::fs::symlink_metadata(dir).is_ok_and(|m| m.is_dir() && !m.file_type().is_symlink())
+        let meta = if options.skip_path_checks {
+            std::fs::metadata(&dir)
+        } else {
+            std::fs::symlink_metadata(&dir)
+        };
+        if !meta.is_ok_and(|m| m.is_dir()) {
+            continue;
+        }
+        // Avoid rewalking the same directory when following explicit symlink overrides.
+        if options.skip_path_checks
+            && !visited.insert(std::fs::canonicalize(&dir).unwrap_or_else(|_| dir.clone()))
         {
-            return;
+            continue;
         }
-        let Ok(rd) = std::fs::read_dir(dir) else {
-            return;
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            continue;
         };
         for e in rd.flatten() {
-            if out.len() >= 10_000 {
+            if !options.skip_size_checks && out.len() >= 10_000 {
                 break;
             }
-            let Ok(kind) = e.file_type() else {
+            let kind = if options.skip_path_checks {
+                std::fs::metadata(e.path()).map(|m| m.file_type())
+            } else {
+                e.file_type()
+            };
+            let Ok(kind) = kind else {
                 continue;
             };
-            if kind.is_symlink() {
-                continue;
-            }
             if kind.is_dir() {
-                visit(&e.path(), depth + 1, out);
+                pending.push((e.path(), depth + 1));
             } else if kind.is_file() {
                 out.push(e.path());
             }
         }
     }
-    let mut out = Vec::new();
-    visit(dir, 0, &mut out);
     out
 }
 

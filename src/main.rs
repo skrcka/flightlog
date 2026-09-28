@@ -3,6 +3,7 @@
 
 mod atif;
 mod bundle;
+mod bypass;
 mod man;
 mod redact;
 mod restore;
@@ -42,11 +43,19 @@ Docs:   https://flightlog.sh  ·  man flightlog";
         and writes one .flightlog.zip: the conversation as an ATIF trajectory, a summary \
         for whoever picks it up, a redaction report, and the tool's own session files so \
         the session can be resumed. Secrets are replaced with [REDACTED:<kind>:<n>] \
-        placeholders before anything is written.",
+        placeholders before anything is written by default.",
     after_help = AFTER_HELP,
     disable_help_subcommand = true
 )]
 struct Cli {
+    #[command(flatten)]
+    overrides: bypass::Overrides,
+    /// Accept explicitly unredacted bundles for private migration
+    #[arg(long, global = true)]
+    allow_unredacted: bool,
+    /// Disable redaction and every bypassable safety check; overwrite outputs
+    #[arg(long, global = true)]
+    yolo: bool,
     /// File of private literal names/domains to redact (one per line; kept local)
     #[arg(long, global = true, value_name = "FILE")]
     redact_file: Option<PathBuf>,
@@ -79,6 +88,9 @@ enum Cmd {
             flightlog export --tool codex --session <id> --no-native"
     )]
     Export {
+        /// Preserve sensitive content for private migration (bundle is not encrypted)
+        #[arg(long)]
+        no_redact: bool,
         /// Tool the session belongs to [default: whichever has the newest session]
         #[arg(long, value_enum, value_name = "TOOL")]
         tool: Option<Tool>,
@@ -136,7 +148,7 @@ enum Cmd {
         display_order = 6,
         long_about = "Put a bundle's session back so its tool can resume it.\n\n\
             Writes the tool's own session files where it looks for them (never \
-            overwriting without --force) and prints the command to run: \
+            overwriting without --force, --overwrite or --yolo) and prints the command to run: \
             claude --resume, codex resume, opencode import, gemini --resume or \
             cursor-agent --resume. Paths inside a session are absolute, so resume in \
             a directory holding the same repository."
@@ -314,6 +326,13 @@ fn safe_display_value(v: &Value) -> Value {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
+    bypass::init(cli.overrides, cli.yolo);
+    if cli.yolo {
+        eprintln!(
+            "YOLO: redaction, validation, path and size protections disabled; overwrites enabled"
+        );
+    }
+    let allow_unredacted = cli.allow_unredacted || cli.yolo;
     if let Some(path) = cli.redact_file {
         std::env::set_var("FLIGHTLOG_REDACT_FILE", path);
     }
@@ -341,6 +360,7 @@ fn run() -> Result<()> {
             }
         }
         Cmd::Export {
+            no_redact,
             tool,
             session,
             cwd,
@@ -352,6 +372,7 @@ fn run() -> Result<()> {
             reviewed,
             include_metadata,
         } => {
+            let no_redact = no_redact || cli.yolo;
             let cwd = cwd_of(cwd)?;
             let s = sources::pick(tool, session.as_deref(), &cwd)?;
             let c = sources::convert(&s, &cwd)?;
@@ -371,6 +392,7 @@ fn run() -> Result<()> {
             let built = bundle::build(
                 &c,
                 bundle::Build {
+                    no_redact,
                     summary: summary_v,
                     include_native: !no_native,
                     reviewed,
@@ -380,10 +402,10 @@ fn run() -> Result<()> {
             )?;
             let out =
                 output.unwrap_or_else(|| PathBuf::from(format!("{}.flightlog.zip", c.session_id)));
-            if !safe_fs::identifier(&c.session_id) {
+            if !bypass::get().skip_path_checks && !safe_fs::identifier(&c.session_id) {
                 bail!("unsafe session identifier");
             }
-            if let Err(p) = bundle::open(&built.bytes) {
+            if let Err(p) = bundle::open_with_policy(&built.bytes, no_redact) {
                 bail!("export failed validation: {}", p.join("; "));
             }
             safe_fs::write(&out, &built.bytes, false)?;
@@ -395,9 +417,10 @@ fn run() -> Result<()> {
                 if no_native { 0 } else { c.native.len() },
                 human(built.bytes.len())
             );
-            print_findings(&built.findings);
-            if let Err(p) = bundle::open(&built.bytes) {
-                bail!("the bundle does not validate:\n  - {}", p.join("\n  - "));
+            if no_redact {
+                eprintln!("redaction: DISABLED — unencrypted bundle may contain credentials and private data");
+            } else {
+                print_findings(&built.findings);
             }
             println!(
                 "wrote {} ({} bytes, sha256 {})",
@@ -408,7 +431,7 @@ fn run() -> Result<()> {
         }
         Cmd::Inspect { file } => {
             let bytes = safe_fs::read(&file, bundle::MAX_ARCHIVE_BYTES)?;
-            let m = match bundle::open(&bytes) {
+            let m = match bundle::open_with_policy(&bytes, allow_unredacted) {
                 Ok(b) => {
                     let steps = b.trajectory["steps"].as_array().map_or(0, Vec::len);
                     println!("valid bundle ({}, {steps} steps)", human(bytes.len()));
@@ -456,14 +479,18 @@ fn run() -> Result<()> {
                 .as_array()
                 .cloned()
                 .unwrap_or_default();
-            println!("redacted: {} placeholders", findings.len());
+            if m["redaction"]["mode"] == "none" {
+                println!("redaction: DISABLED (unredacted private migration bundle)");
+            } else {
+                println!("redacted: {} placeholders", findings.len());
+            }
         }
         Cmd::Validate { file } => {
-            bundle::read(&file)?;
+            bundle::read(&file, allow_unredacted)?;
             println!("valid");
         }
         Cmd::Extract { file, output } => {
-            let b = bundle::read(&file)?;
+            let b = bundle::read(&file, allow_unredacted)?;
             let dir = output.unwrap_or_else(|| {
                 PathBuf::from(file.file_stem().unwrap_or_default()).with_extension("")
             });
@@ -479,7 +506,7 @@ fn run() -> Result<()> {
             url_file,
         } => {
             let bytes = safe_fs::read(&file, bundle::MAX_ARCHIVE_BYTES)?;
-            if let Err(p) = bundle::open(&bytes) {
+            if let Err(p) = bundle::open_with_policy(&bytes, allow_unredacted) {
                 bail!("not pushing an invalid bundle:\n  - {}", p.join("\n  - "));
             }
             targets::put(&targets::url_input(url, url_file)?, &bytes)?;
@@ -491,7 +518,7 @@ fn run() -> Result<()> {
             url_file,
         } => {
             let bytes = targets::get(&targets::url_input(url, url_file)?)?;
-            if let Err(p) = bundle::open(&bytes) {
+            if let Err(p) = bundle::open_with_policy(&bytes, allow_unredacted) {
                 bail!(
                     "the download is not a valid bundle:\n  - {}",
                     p.join("\n  - ")
@@ -533,13 +560,13 @@ fn run() -> Result<()> {
             print!("{body}");
         }
         Cmd::Restore { file, cwd, force } => {
-            let b = bundle::read(&file)?;
+            let b = bundle::read(&file, allow_unredacted)?;
             let cwd = cwd_of(cwd)?;
             let work =
                 Path::new(".flightlog").join(b.manifest["bundle_id"].as_str().unwrap_or("bundle"));
             let r = restore::restore(&b, &cwd, &work, force)?;
             for p in &r.written {
-                println!("restored {}", p.display());
+                println!("restored {}", safe_fs::display(p));
             }
             if let Some(orig) = b.manifest["source"]["cwd"].as_str().filter(|o| *o != cwd) {
                 println!(
@@ -547,7 +574,7 @@ fn run() -> Result<()> {
                     safe_fs::text(orig)
                 );
             }
-            println!("now run: {}", r.next);
+            println!("now run: {}", safe_fs::text(&r.next));
         }
     }
     Ok(())

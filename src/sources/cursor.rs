@@ -176,18 +176,22 @@ fn walk_blobs(
         if !seen.insert(id.clone()) {
             continue;
         }
-        if seen.len() > 10_000 {
+        if !crate::bypass::get().skip_size_checks && seen.len() > 10_000 {
             bail!("Cursor graph exceeds 10000 blobs");
         }
         let data: Vec<u8> = conn
             .query_row(
-                "SELECT data FROM blobs WHERE id = ?1 AND length(data) <= 10485760",
+                if crate::bypass::get().skip_size_checks {
+                    "SELECT data FROM blobs WHERE id = ?1"
+                } else {
+                    "SELECT data FROM blobs WHERE id = ?1 AND length(data) <= 10485760"
+                },
                 [&id],
                 |r| Ok(bytes_of(r.get_ref(0)?).unwrap_or_default()),
             )
             .context("missing or oversized Cursor blob")?;
         total = total.saturating_add(data.len());
-        if total > crate::safe_fs::MAX_FILE_BYTES {
+        if !crate::bypass::get().skip_size_checks && total > crate::safe_fs::MAX_FILE_BYTES {
             bail!("Cursor graph exceeds size limit");
         }
         if let Ok(v @ Value::Object(_)) = serde_json::from_slice::<Value>(&data) {
@@ -197,14 +201,18 @@ fn walk_blobs(
         // Only the supported tree format: repeated field 1, 32-byte blob IDs.
         if data.is_empty()
             || !data.len().is_multiple_of(34)
-            || data.chunks_exact(34).any(|c| c[..2] != [0x0a, 0x20])
+            || data
+                .as_chunks::<34>()
+                .0
+                .iter()
+                .any(|c| c[..2] != [0x0a, 0x20])
         {
             bail!("unsupported Cursor tree format");
         }
-        for chunk in data.chunks_exact(34).rev() {
+        for chunk in data.as_chunks::<34>().0.iter().rev() {
             pending.push(hex(&chunk[2..]));
         }
-        if pending.len() > 10_000 {
+        if !crate::bypass::get().skip_size_checks && pending.len() > 10_000 {
             bail!("Cursor graph exceeds size limit");
         }
     }
@@ -320,7 +328,11 @@ fn dump_store(conn: &Connection, meta_json: &Value, reachable: &HashSet<String>)
     ids.sort();
     for id in ids {
         let data: Vec<u8> = conn.query_row(
-            "SELECT data FROM blobs WHERE id=?1 AND length(data)<=10485760",
+            if crate::bypass::get().skip_size_checks {
+                "SELECT data FROM blobs WHERE id=?1"
+            } else {
+                "SELECT data FROM blobs WHERE id=?1 AND length(data)<=10485760"
+            },
             [id],
             |r| Ok(bytes_of(r.get_ref(0)?).unwrap_or_default()),
         )?;
@@ -395,7 +407,7 @@ pub fn validate_dump(d: &Value) -> Result<()> {
         bail!("invalid Cursor dump");
     }
     let blobs = d["blobs"].as_array().context("missing Cursor blobs")?;
-    if blobs.len() > 10_000 {
+    if !crate::bypass::get().skip_size_checks && blobs.len() > 10_000 {
         bail!("too many Cursor blobs");
     }
     let ids: HashSet<_> = blobs.iter().filter_map(|b| b["id"].as_str()).collect();
@@ -419,7 +431,9 @@ pub fn validate_dump(d: &Value) -> Result<()> {
                 || raw.is_empty()
                 || !raw.len().is_multiple_of(34)
                 || raw
-                    .chunks_exact(34)
+                    .as_chunks::<34>()
+                    .0
+                    .iter()
                     .any(|c| c[0] != 0x0a || c[1] != 0x20 || !ids.contains(hex(&c[2..]).as_str()))
             {
                 bail!("unsupported opaque Cursor content; use --no-native");
@@ -435,11 +449,13 @@ pub fn validate_dump(d: &Value) -> Result<()> {
 /// session folder.
 pub fn restore_cli(dump: &[u8], session_id: &str, cwd: &str, force: bool) -> Result<PathBuf> {
     let d: Value = serde_json::from_slice(dump).context("parse Cursor store dump")?;
-    validate_dump(&d)?;
-    if d["format"] != DUMP_FORMAT {
+    if !crate::bypass::get().skip_content_checks {
+        validate_dump(&d)?;
+    }
+    if !crate::bypass::get().skip_format_checks && d["format"] != DUMP_FORMAT {
         bail!("unknown Cursor store dump format");
     }
-    if !crate::safe_fs::identifier(session_id) {
+    if !crate::bypass::get().skip_path_checks && !crate::safe_fs::identifier(session_id) {
         bail!("invalid session id");
     }
     let dir = cursor_home()
@@ -455,7 +471,9 @@ pub fn restore_cli(dump: &[u8], session_id: &str, cwd: &str, force: bool) -> Res
     ];
     for statement in d["schema"].as_array().into_iter().flatten() {
         let sql = statement.as_str().context("invalid schema")?;
-        if !SCHEMA.contains(&sql.trim().trim_end_matches(';')) {
+        if !crate::bypass::get().skip_format_checks
+            && !SCHEMA.contains(&sql.trim().trim_end_matches(';'))
+        {
             bail!("unsupported Cursor schema; executable schema is forbidden");
         }
     }
@@ -465,7 +483,10 @@ pub fn restore_cli(dump: &[u8], session_id: &str, cwd: &str, force: bool) -> Res
     conn.set_db_config(rusqlite::config::DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)?;
     let tx = conn.transaction()?;
     tx.execute_batch("CREATE TABLE blobs (id TEXT PRIMARY KEY, data BLOB); CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);")?;
-    if d["blobs"].as_array().is_none_or(|b| b.len() > 10_000) {
+    if d["blobs"]
+        .as_array()
+        .is_none_or(|b| !crate::bypass::get().skip_size_checks && b.len() > 10_000)
+    {
         bail!("invalid or excessive Cursor blobs");
     }
     for blob in d["blobs"].as_array().into_iter().flatten() {

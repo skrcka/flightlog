@@ -18,4 +18,4 @@ with tempfile.TemporaryDirectory() as tmp:
             p=pathlib.Path(os.fsdecode(raw))
             if p.is_file():
                 dest=source/p;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(p,dest)
-    subprocess.run([str(exe),'dir',str(source),'--redact=100','--no-banner','--config','.gitleaks.toml'],check=True)
+    subprocess.run([str(exe),'dir','.','--redact=100','--no-banner','--config','.gitleaks.toml'],cwd=source,check=True)

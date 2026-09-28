@@ -4,12 +4,42 @@
 .SH NAME
 flightlog\-skills \- Install the agent skills that teach agents to export and import sessions
 .SH SYNOPSIS
-\fBflightlog skills\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+\fBflightlog skills\fR [\fB\-\-skip\-path\-checks\fR] [\fB\-\-skip\-size\-checks\fR] [\fB\-\-skip\-checksums\fR] [\fB\-\-skip\-format\-checks\fR] [\fB\-\-skip\-content\-checks\fR] [\fB\-\-overwrite\fR] [\fB\-\-allow\-http\fR] [\fB\-\-allow\-unredacted\fR] [\fB\-\-yolo\fR] [\fB\-\-redact\-file\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
 .SH DESCRIPTION
 Install the agent skills that teach agents to export and import sessions.
 .PP
 Two skills, flightlog\-export and flightlog\-import, tell an agent how to save its own session (with a summary it writes) and how to pick one up again. They are built into this binary. Agents can also get them as a plugin: claude|codex|copilot plugin marketplace add skrcka/flightlog, or gemini extensions install https://github.com/skrcka/flightlog.
 .SH OPTIONS
+.TP
+\fB\-\-skip\-path\-checks\fR
+Allow traversal, absolute destinations and filesystem symlinks
+.TP
+\fB\-\-skip\-size\-checks\fR
+Disable Flightlog archive, entry and input size limits
+.TP
+\fB\-\-skip\-checksums\fR
+Ignore manifest SHA\-256 mismatches (ZIP decoding must still succeed)
+.TP
+\fB\-\-skip\-format\-checks\fR
+Skip bundle schema and file\-inventory validation
+.TP
+\fB\-\-skip\-content\-checks\fR
+Skip input redaction and opaque\-content checks, regardless of manifest mode
+.TP
+\fB\-\-overwrite\fR
+Replace existing outputs and restore files; merge extraction directories
+.TP
+\fB\-\-allow\-http\fR
+Permit plaintext HTTP transfers
+.TP
+\fB\-\-allow\-unredacted\fR
+Accept explicitly unredacted bundles for private migration
+.TP
+\fB\-\-yolo\fR
+Disable redaction and every bypassable safety check; overwrite outputs
+.TP
+\fB\-\-redact\-file\fR \fI<FILE>\fR
+File of private literal names/domains to redact (one per line; kept local)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -20,8 +50,5 @@ Install the skills for every agent found here, or the ones named
 .TP
 flightlog\-skills\-show(1)
 Print a skill\*(Aqs SKILL.md
-.TP
-flightlog\-skills\-help(1)
-Print this message or the help of the given subcommand(s)
 .SH SEE ALSO
 .BR flightlog (1)

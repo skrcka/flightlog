@@ -44,6 +44,7 @@ fn git(args: &[&str], cwd: &str) -> Option<String> {
 
 /// Options for building a bundle.
 pub struct Build<'a> {
+    pub no_redact: bool,
     pub summary: Value,
     pub include_native: bool,
     pub reviewed: bool,
@@ -69,12 +70,17 @@ fn compact(v: Value) -> Value {
 }
 
 pub fn build(c: &Converted, opts: Build) -> Result<Built> {
-    if c.native.len() > MAX_ENTRIES - 2
-        || c.native.iter().map(|f| f.bytes.len() as u64).sum::<u64>() > MAX_UNCOMPRESSED
+    if !crate::bypass::get().skip_size_checks
+        && (c.native.len() > MAX_ENTRIES - 2
+            || c.native.iter().map(|f| f.bytes.len() as u64).sum::<u64>() > MAX_UNCOMPRESSED)
     {
         bail!("native session exceeds bundle limits");
     }
-    let mut red = Redactor::configured()?;
+    let mut red = if opts.no_redact {
+        Redactor::disabled()
+    } else {
+        Redactor::configured()?
+    };
     let steps: Vec<Value> = c
         .steps
         .iter()
@@ -160,10 +166,11 @@ pub fn build(c: &Converted, opts: Build) -> Result<Built> {
         "source": source,
         "summary": summary,
         "redaction": {
+            "mode": if opts.no_redact { "none" } else { "redacted" },
             "engine": format!("flightlog/{}", env!("CARGO_PKG_VERSION")),
-            "applied_at": now(),
+            "applied_at": if opts.no_redact { None } else { Some(now()) },
             "reviewed_by_user": opts.reviewed,
-            "native": if native.is_empty() { "absent" } else { "redacted" },
+            "native": if native.is_empty() { "absent" } else if opts.no_redact { "skipped" } else { "redacted" },
             "findings": red.findings_json(),
         },
         "stats": {
@@ -228,6 +235,14 @@ fn safe_path(name: &str) -> bool {
         && !name.split('/').any(|s| s == ".." || s == ".")
 }
 
+fn allowed_namespace(name: &str) -> bool {
+    name == "manifest.json"
+        || name == "trajectory.json"
+        || name.starts_with("native/")
+        || name.starts_with("assets/")
+        || name.starts_with("subagents/")
+}
+
 /// Reject duplicate/aliased central-directory names before zip's name map can hide them.
 fn check_directory(bytes: &[u8]) -> std::result::Result<(), String> {
     let fail = || "invalid, duplicate or unsupported ZIP directory".to_string();
@@ -248,7 +263,9 @@ fn check_directory(bytes: &[u8]) -> std::result::Result<(), String> {
         return Err(fail());
     }
     let count = u16at(end + 10).ok_or_else(fail)?;
-    if count > MAX_ENTRIES || u16at(end + 8) != Some(count) {
+    if (!crate::bypass::get().skip_size_checks && count > MAX_ENTRIES)
+        || u16at(end + 8) != Some(count)
+    {
         return Err(fail());
     }
     let mut at = u32at(end + 16).ok_or_else(fail)?;
@@ -264,11 +281,7 @@ fn check_directory(bytes: &[u8]) -> std::result::Result<(), String> {
         let name = std::str::from_utf8(bytes.get(at + 46..at + 46 + n).ok_or_else(fail)?)
             .map_err(|_| fail())?;
         if !seen.insert(name.to_ascii_lowercase())
-            || !(name == "manifest.json"
-                || name == "trajectory.json"
-                || name.starts_with("native/")
-                || name.starts_with("assets/")
-                || name.starts_with("subagents/"))
+            || (!crate::bypass::get().skip_path_checks && !allowed_namespace(name))
         {
             return Err(fail());
         }
@@ -285,19 +298,34 @@ fn check_directory(bytes: &[u8]) -> std::result::Result<(), String> {
 }
 
 /// Open and validate. `Err` lists every problem found.
+#[cfg(test)]
 pub fn open(bytes: &[u8]) -> std::result::Result<Bundle, Vec<String>> {
+    open_with_policy(bytes, false)
+}
+
+pub fn open_with_policy(
+    bytes: &[u8],
+    allow_unredacted: bool,
+) -> std::result::Result<Bundle, Vec<String>> {
     let mut problems = Vec::new();
-    if bytes.len() > MAX_ARCHIVE_BYTES {
+    let options = crate::bypass::get();
+    if !options.skip_size_checks && bytes.len() > MAX_ARCHIVE_BYTES {
         return Err(vec![format!("archive exceeds {MAX_ARCHIVE_BYTES} bytes")]);
     }
-    if let Err(e) = check_directory(bytes) {
+    if let Err(e) = check_directory(bytes).or_else(|e| {
+        if options.skip_format_checks {
+            Ok(())
+        } else {
+            Err(e)
+        }
+    }) {
         return Err(vec![e]);
     }
     let mut z = match zip::ZipArchive::new(Cursor::new(bytes)) {
         Ok(z) => z,
         Err(e) => return Err(vec![format!("not a ZIP archive: {e}")]),
     };
-    if z.len() > MAX_ENTRIES {
+    if !options.skip_size_checks && z.len() > MAX_ENTRIES {
         return Err(vec![format!("more than {MAX_ENTRIES} entries")]);
     }
     let mut total = 0u64;
@@ -311,11 +339,11 @@ pub fn open(bytes: &[u8]) -> std::result::Result<Bundle, Vec<String>> {
             }
         };
         let name = e.name().to_string();
-        if !safe_path(&name) {
+        if !options.skip_path_checks && (!safe_path(&name) || !allowed_namespace(&name)) {
             problems.push(format!("unsafe path: {name}"));
             continue;
         }
-        if e.unix_mode().is_some_and(|m| m & 0o170000 == 0o120000) {
+        if !options.skip_path_checks && e.unix_mode().is_some_and(|m| m & 0o170000 == 0o120000) {
             problems.push(format!("symlink: {name}"));
             continue;
         }
@@ -323,19 +351,23 @@ pub fn open(bytes: &[u8]) -> std::result::Result<Bundle, Vec<String>> {
             continue;
         }
         total = total.saturating_add(e.size());
-        if total > MAX_UNCOMPRESSED {
+        if !options.skip_size_checks && total > MAX_UNCOMPRESSED {
             return Err(vec!["uncompressed content exceeds 1 GiB".into()]);
         }
         let declared = e.size();
-        if declared > MAX_ARCHIVE_BYTES as u64 {
+        if !options.skip_size_checks && declared > MAX_ARCHIVE_BYTES as u64 {
             return Err(vec!["entry exceeds 100 MiB".into()]);
         }
         let mut buf = Vec::new();
-        if (&mut e).take(declared + 1).read_to_end(&mut buf).is_err() {
+        if (&mut e)
+            .take(crate::bypass::limit(declared.saturating_add(1)))
+            .read_to_end(&mut buf)
+            .is_err()
+        {
             problems.push(format!("unreadable entry: {name}"));
             continue;
         }
-        if buf.len() as u64 != declared {
+        if !options.skip_size_checks && buf.len() as u64 != declared {
             return Err(vec!["ZIP entry size mismatch".into()]);
         }
         files.insert(name, buf);
@@ -351,69 +383,84 @@ pub fn open(bytes: &[u8]) -> std::result::Result<Bundle, Vec<String>> {
             return Err(problems);
         }
     };
-    if manifest["format"] != FORMAT {
-        problems.push(format!("manifest.format must be \"{FORMAT}\""));
-    }
-    if manifest["format_version"]
-        .as_str()
-        .and_then(|v| v.split('.').next())
-        != Some("1")
+    if !options.skip_path_checks
+        && uuid::Uuid::parse_str(manifest["bundle_id"].as_str().unwrap_or("")).is_err()
     {
-        problems.push("manifest.format_version must be 1.x".into());
-    }
-    if uuid::Uuid::parse_str(manifest["bundle_id"].as_str().unwrap_or("")).is_err() {
         problems.push("bundle_id must be a UUID".into());
     }
-    for f in ["bundle_id", "created_at"] {
-        if manifest[f].as_str().is_none_or(str::is_empty) {
-            problems.push(format!("manifest.{f} is required"));
+    if !options.skip_format_checks {
+        if manifest["format"] != FORMAT {
+            problems.push(format!("manifest.format must be \"{FORMAT}\""));
         }
-    }
-    for f in ["tool", "session_id"] {
-        if manifest["source"][f].as_str().is_none_or(str::is_empty) {
-            problems.push(format!("manifest.source.{f} is required"));
-        }
-    }
-    for f in ["goal", "state"] {
-        if manifest["summary"][f]
+        if manifest["format_version"]
             .as_str()
-            .is_none_or(|s| s.trim().is_empty())
+            .and_then(|v| v.split('.').next())
+            != Some("1")
         {
-            problems.push(format!("manifest.summary.{f} is required"));
+            problems.push("manifest.format_version must be 1.x".into());
         }
-    }
-    if !manifest["redaction"]["findings"].is_array() {
-        problems.push("manifest.redaction.findings is required".into());
+        for f in ["bundle_id", "created_at"] {
+            if manifest[f].as_str().is_none_or(str::is_empty) {
+                problems.push(format!("manifest.{f} is required"));
+            }
+        }
+        for f in ["tool", "session_id"] {
+            if manifest["source"][f].as_str().is_none_or(str::is_empty) {
+                problems.push(format!("manifest.source.{f} is required"));
+            }
+        }
+        for f in ["goal", "state"] {
+            if manifest["summary"][f]
+                .as_str()
+                .is_none_or(|s| s.trim().is_empty())
+            {
+                problems.push(format!("manifest.summary.{f} is required"));
+            }
+        }
+        if !manifest["redaction"]["findings"].is_array() {
+            problems.push("manifest.redaction.findings is required".into());
+        }
     }
     let listed = manifest["files"].as_array().cloned().unwrap_or_default();
-    if listed.is_empty() {
+    if !options.skip_format_checks && listed.is_empty() {
         problems.push("manifest.files is required".into());
     }
     let mut declared_paths = std::collections::BTreeSet::new();
     for f in &listed {
         let Some(p) = f["path"].as_str() else {
-            problems.push("manifest.files entry without path".into());
+            if !options.skip_format_checks {
+                problems.push("manifest.files entry without path".into());
+            }
             continue;
         };
-        if !declared_paths.insert(p) || !safe_path(p) || p == "manifest.json" {
+        let duplicate = !declared_paths.insert(p);
+        if (!options.skip_format_checks && (duplicate || p == "manifest.json"))
+            || (!options.skip_path_checks && !safe_path(p))
+        {
             problems.push("invalid or duplicate declared path".into());
         }
-        if files
-            .get(p)
-            .is_some_and(|b| f["bytes"].as_u64() != Some(b.len() as u64))
+        if !options.skip_size_checks
+            && files
+                .get(p)
+                .is_some_and(|b| f["bytes"].as_u64() != Some(b.len() as u64))
         {
             problems.push(format!("size mismatch: {p}"));
         }
         match files.get(p) {
-            None => problems.push(format!("listed file missing: {p}")),
-            Some(b) if f["sha256"].as_str() != Some(sha256_hex(b).as_str()) => {
+            None if !options.skip_format_checks => {
+                problems.push(format!("listed file missing: {p}"))
+            }
+            Some(b)
+                if !options.skip_checksums
+                    && f["sha256"].as_str() != Some(sha256_hex(b).as_str()) =>
+            {
                 problems.push(format!("checksum mismatch: {p}"))
             }
             _ => {}
         }
     }
     for name in files.keys().filter(|n| n.as_str() != "manifest.json") {
-        if !declared_paths.contains(name.as_str()) {
+        if !options.skip_format_checks && !declared_paths.contains(name.as_str()) {
             problems.push(format!("unlisted file: {name}"));
         }
     }
@@ -431,53 +478,71 @@ pub fn open(bytes: &[u8]) -> std::result::Result<Bundle, Vec<String>> {
             Value::Null
         }
     };
-    if !trajectory["schema_version"]
-        .as_str()
-        .is_some_and(|v| v.starts_with("ATIF-v1."))
-    {
-        problems.push("trajectory.schema_version must be ATIF-v1.x".into());
+    if !options.skip_format_checks {
+        if !trajectory["schema_version"]
+            .as_str()
+            .is_some_and(|v| v.starts_with("ATIF-v1."))
+        {
+            problems.push("trajectory.schema_version must be ATIF-v1.x".into());
+        }
+        if trajectory["session_id"] != manifest["source"]["session_id"] {
+            problems.push("trajectory.session_id must equal manifest.source.session_id".into());
+        }
+        if !trajectory["steps"].is_array() {
+            problems.push("trajectory.steps must be an array".into());
+        }
     }
-    if trajectory["session_id"] != manifest["source"]["session_id"] {
-        problems.push("trajectory.session_id must equal manifest.source.session_id".into());
+    let unredacted = manifest["redaction"]["mode"] == "none";
+    match manifest["redaction"].get("mode") {
+        None => {} // Earlier bundles use the redacted default.
+        Some(Value::String(mode)) if mode == "none" || mode == "redacted" => {}
+        _ if !options.skip_format_checks => problems.push("unsupported redaction mode".into()),
+        _ => {}
     }
-    if !trajectory["steps"].is_array() {
-        problems.push("trajectory.steps must be an array".into());
+    if unredacted && !allow_unredacted && !options.skip_content_checks {
+        problems.push(
+            "unredacted bundle: use --allow-unredacted (or --yolo) for private migration".into(),
+        );
     }
-    match Redactor::configured() {
-        Err(_) => problems.push("cannot load redaction policy".into()),
-        Ok(mut red) => {
-            if red.value(&manifest, "manifest.json") != manifest
-                || red.value(&trajectory, "trajectory.json") != trajectory
-            {
-                problems
-                    .push("unredacted sensitive content in bundle metadata or trajectory".into());
-            }
-            for (name, bytes) in files
-                .iter()
-                .filter(|(n, _)| n.as_str() != "manifest.json" && n.as_str() != "trajectory.json")
-            {
-                match red.native(bytes, name) {
-                    Ok(clean) => {
-                        // Compare parsed JSON, since formatting is not significant.
-                        let changed = if name.ends_with(".json") {
-                            serde_json::from_slice::<Value>(&clean).ok()
-                                != serde_json::from_slice::<Value>(bytes).ok()
-                        } else if name.ends_with(".jsonl") {
-                            let parse = |data: &[u8]| -> Vec<Value> {
-                                String::from_utf8_lossy(data)
-                                    .lines()
-                                    .filter_map(|l| serde_json::from_str(l).ok())
-                                    .collect()
+    // Content opt-out must not clone and parse native payloads just to compare
+    // them to themselves; the independently enabled integrity checks ran above.
+    if !unredacted && !options.skip_content_checks {
+        match Redactor::configured() {
+            Err(_) => problems.push("cannot load redaction policy".into()),
+            Ok(mut red) => {
+                if red.value(&manifest, "manifest.json") != manifest
+                    || red.value(&trajectory, "trajectory.json") != trajectory
+                {
+                    problems.push(
+                        "unredacted sensitive content in bundle metadata or trajectory".into(),
+                    );
+                }
+                for (name, bytes) in files.iter().filter(|(n, _)| {
+                    n.as_str() != "manifest.json" && n.as_str() != "trajectory.json"
+                }) {
+                    match red.native(bytes, name) {
+                        Ok(clean) => {
+                            // Compare parsed JSON, since formatting is not significant.
+                            let changed = if name.ends_with(".json") {
+                                serde_json::from_slice::<Value>(&clean).ok()
+                                    != serde_json::from_slice::<Value>(bytes).ok()
+                            } else if name.ends_with(".jsonl") {
+                                let parse = |data: &[u8]| -> Vec<Value> {
+                                    String::from_utf8_lossy(data)
+                                        .lines()
+                                        .filter_map(|l| serde_json::from_str(l).ok())
+                                        .collect()
+                                };
+                                parse(&clean) != parse(bytes)
+                            } else {
+                                clean != *bytes
                             };
-                            parse(&clean) != parse(bytes)
-                        } else {
-                            clean != *bytes
-                        };
-                        if changed {
-                            problems.push(format!("unredacted native content: {name}"));
+                            if changed {
+                                problems.push(format!("unredacted native content: {name}"));
+                            }
                         }
+                        Err(_) => problems.push(format!("unsupported native content: {name}")),
                     }
-                    Err(_) => problems.push(format!("unsupported native content: {name}")),
                 }
             }
         }
@@ -493,9 +558,9 @@ pub fn open(bytes: &[u8]) -> std::result::Result<Bundle, Vec<String>> {
     }
 }
 
-pub fn read(path: &std::path::Path) -> Result<Bundle> {
+pub fn read(path: &std::path::Path, allow_unredacted: bool) -> Result<Bundle> {
     let bytes = crate::safe_fs::read(path, MAX_ARCHIVE_BYTES).context("read bundle")?;
-    match open(&bytes) {
+    match open_with_policy(&bytes, allow_unredacted) {
         Ok(b) => Ok(b),
         Err(p) => bail!(
             "invalid bundle {}:\n  - {}",
@@ -507,10 +572,14 @@ pub fn read(path: &std::path::Path) -> Result<Bundle> {
 
 /// Write every file of the bundle under `dir`.
 pub fn extract(b: &Bundle, dir: &std::path::Path) -> Result<()> {
-    if std::fs::symlink_metadata(dir).is_ok() {
+    if std::fs::symlink_metadata(dir).is_ok() && !crate::bypass::get().overwrite {
         bail!("extract destination must not exist");
     }
-    crate::safe_fs::create_dir(dir)?;
+    if crate::bypass::get().overwrite {
+        crate::safe_fs::dir(dir)?;
+    } else {
+        crate::safe_fs::create_dir(dir)?;
+    }
     for (name, bytes) in &b.files {
         crate::safe_fs::write(&dir.join(name), bytes, false)?;
     }
@@ -548,6 +617,7 @@ mod tests {
 
     fn opts() -> Build<'static> {
         Build {
+            no_redact: false,
             summary: json!({ "goal": "g", "state": "s" }),
             include_native: true,
             reviewed: true,

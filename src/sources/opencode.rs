@@ -86,9 +86,11 @@ pub fn export(id: &str) -> Result<String> {
     }
     tmp.rewind()?;
     let mut raw = String::new();
-    tmp.take(crate::safe_fs::MAX_FILE_BYTES as u64 + 1)
-        .read_to_string(&mut raw)?;
-    if raw.len() > crate::safe_fs::MAX_FILE_BYTES {
+    tmp.take(crate::bypass::limit(
+        crate::safe_fs::MAX_FILE_BYTES as u64 + 1,
+    ))
+    .read_to_string(&mut raw)?;
+    if !crate::bypass::get().skip_size_checks && raw.len() > crate::safe_fs::MAX_FILE_BYTES {
         bail!("session exceeds size limit");
     }
     let start = raw.find('{').context("opencode export printed no JSON")?;

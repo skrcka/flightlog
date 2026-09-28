@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Add `export --no-redact` for private migration and `--allow-unredacted` on input.
+  Explicitly mark these bundles and preserve native bytes without redaction.
+- Add independent `--skip-path-checks`, `--skip-size-checks`, `--skip-checksums`,
+  `--skip-format-checks`, `--skip-content-checks`, `--overwrite` and `--allow-http`
+  overrides. `--yolo` combines all overrides and disables export redaction.
+  Normal commands retain the security defaults.
+
 ## [0.2.2] - 2026-09-28
 
 - Confine restores to known agent layouts; derive resume commands locally and

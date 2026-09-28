@@ -8,16 +8,43 @@ flightlog \- Save coding\-agent sessions as portable, redacted bundles, and brin
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH SYNOPSIS
-\fBflightlog\fR [\fB\-\-redact\-file\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIsubcommands\fR>
+\fBflightlog\fR [\fB\-\-skip\-path\-checks\fR] [\fB\-\-skip\-size\-checks\fR] [\fB\-\-skip\-checksums\fR] [\fB\-\-skip\-format\-checks\fR] [\fB\-\-skip\-content\-checks\fR] [\fB\-\-overwrite\fR] [\fB\-\-allow\-http\fR] [\fB\-\-allow\-unredacted\fR] [\fB\-\-yolo\fR] [\fB\-\-redact\-file\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIsubcommands\fR>
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH DESCRIPTION
 Save coding\-agent sessions as portable, redacted bundles, and bring them back.
 .PP
-flightlog reads a session of Claude Code, Codex, opencode, Gemini CLI or Cursor and writes one .flightlog.zip: the conversation as an ATIF trajectory, a summary for whoever picks it up, a redaction report, and the tool\*(Aqs own session files so the session can be resumed. Secrets are replaced with [REDACTED:<kind>:<n>] placeholders before anything is written.
+flightlog reads a session of Claude Code, Codex, opencode, Gemini CLI or Cursor and writes one .flightlog.zip: the conversation as an ATIF trajectory, a summary for whoever picks it up, a redaction report, and the tool\*(Aqs own session files so the session can be resumed. Secrets are replaced with [REDACTED:<kind>:<n>] placeholders before anything is written by default.
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH OPTIONS
+.TP
+\fB\-\-skip\-path\-checks\fR
+Allow traversal, absolute destinations and filesystem symlinks
+.TP
+\fB\-\-skip\-size\-checks\fR
+Disable Flightlog archive, entry and input size limits
+.TP
+\fB\-\-skip\-checksums\fR
+Ignore manifest SHA\-256 mismatches (ZIP decoding must still succeed)
+.TP
+\fB\-\-skip\-format\-checks\fR
+Skip bundle schema and file\-inventory validation
+.TP
+\fB\-\-skip\-content\-checks\fR
+Skip input redaction and opaque\-content checks, regardless of manifest mode
+.TP
+\fB\-\-overwrite\fR
+Replace existing outputs and restore files; merge extraction directories
+.TP
+\fB\-\-allow\-http\fR
+Permit plaintext HTTP transfers
+.TP
+\fB\-\-allow\-unredacted\fR
+Accept explicitly unredacted bundles for private migration
+.TP
+\fB\-\-yolo\fR
+Disable redaction and every bypassable safety check; overwrite outputs
 .TP
 \fB\-\-redact\-file\fR \fI<FILE>\fR
 File of private literal names/domains to redact (one per line; kept local)
