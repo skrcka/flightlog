@@ -108,12 +108,12 @@ pub fn dir(path: &Path) -> Result<Dir> {
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => false,
             Err(e) => return Err(e.into()),
         };
+        if created {
+            restrict_dir(&d, Path::new(&c))?;
+        }
         d = d
             .open_dir_nofollow(&c)
             .context("output directory must not be a symlink")?;
-        if created {
-            restrict(&d)?;
-        }
     }
     Ok(d)
 }
@@ -141,6 +141,12 @@ pub fn write(path: &Path, bytes: &[u8], force: bool) -> Result<()> {
             .unwrap_or(Path::new(".")))?;
         let mut opts = std::fs::OpenOptions::new();
         opts.write(true);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            use windows_sys::Win32::{Foundation::GENERIC_WRITE, Storage::FileSystem::WRITE_DAC};
+            opts.access_mode(GENERIC_WRITE | WRITE_DAC);
+        }
         if force {
             opts.create(true).truncate(true);
         } else {
@@ -176,6 +182,12 @@ pub fn write(path: &Path, bytes: &[u8], force: bool) -> Result<()> {
     let temp = format!(".flightlog-{}.tmp", uuid::Uuid::new_v4());
     let mut opts = OpenOptions::new();
     opts.write(true).create_new(true).follow(FollowSymlinks::No);
+    #[cfg(windows)]
+    {
+        use cap_std::fs::OpenOptionsExt;
+        use windows_sys::Win32::{Foundation::GENERIC_WRITE, Storage::FileSystem::WRITE_DAC};
+        opts.access_mode(GENERIC_WRITE | WRITE_DAC);
+    }
     #[cfg(unix)]
     opts.mode(0o600);
     let result = (|| -> Result<()> {
@@ -314,7 +326,7 @@ fn private_sddl() -> Result<Vec<u16>> {
 fn restrict(file: &impl std::os::windows::io::AsRawHandle) -> Result<()> {
     use std::ptr::{null, null_mut};
     use windows_sys::Win32::{
-        Foundation::{CloseHandle, LocalFree, INVALID_HANDLE_VALUE},
+        Foundation::LocalFree,
         Security::{
             Authorization::{
                 ConvertStringSecurityDescriptorToSecurityDescriptorW, SetSecurityInfo,
@@ -322,10 +334,6 @@ fn restrict(file: &impl std::os::windows::io::AsRawHandle) -> Result<()> {
             },
             GetSecurityDescriptorDacl, DACL_SECURITY_INFORMATION,
             PROTECTED_DACL_SECURITY_INFORMATION,
-        },
-        Storage::FileSystem::{
-            ReOpenFile, FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_DELETE, FILE_SHARE_READ,
-            FILE_SHARE_WRITE,
         },
     };
     static SDDL: std::sync::OnceLock<std::result::Result<Vec<u16>, String>> =
@@ -356,19 +364,10 @@ fn restrict(file: &impl std::os::windows::io::AsRawHandle) -> Result<()> {
             LocalFree(descriptor);
             bail!("cannot construct private file permissions");
         }
-        let writable = ReOpenFile(
-            file.as_raw_handle(),
-            0x00040000, /* WRITE_DAC */
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            FILE_FLAG_BACKUP_SEMANTICS,
-        );
-        if writable == INVALID_HANDLE_VALUE {
-            let error = std::io::Error::last_os_error();
-            LocalFree(descriptor);
-            return Err(error).context("reopen file for private Windows permissions");
-        }
+        // Callers open the handle with WRITE_DAC, so no path-based reopening
+        // (or ReOpenFile, which fails for directory handles) is needed.
         let status = SetSecurityInfo(
-            writable,
+            file.as_raw_handle(),
             SE_FILE_OBJECT,
             DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
             null_mut(),
@@ -376,7 +375,6 @@ fn restrict(file: &impl std::os::windows::io::AsRawHandle) -> Result<()> {
             acl,
             null(),
         );
-        CloseHandle(writable);
         LocalFree(descriptor);
         if status != 0 {
             return Err(std::io::Error::from_raw_os_error(status as i32))
@@ -397,8 +395,25 @@ pub fn create_dir(path: &Path) -> Result<()> {
         .unwrap_or(Path::new(".")))?;
     let name = path.file_name().context("directory needs a name")?;
     parent.create_dir_with(name, &builder())?;
-    restrict(&parent.open_dir_nofollow(name)?)?;
+    restrict_dir(&parent, Path::new(name))?;
     Ok(())
+}
+
+fn restrict_dir(parent: &Dir, name: &Path) -> Result<()> {
+    #[cfg(windows)]
+    {
+        use cap_fs_ext::OpenOptionsMaybeDirExt;
+        use cap_std::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::WRITE_DAC;
+        let mut options = OpenOptions::new();
+        options
+            .access_mode(WRITE_DAC)
+            .maybe_dir(true)
+            .follow(FollowSymlinks::No);
+        restrict(&parent.open_with(name, &options)?)
+    }
+    #[cfg(not(windows))]
+    restrict(&parent.open_dir_nofollow(name)?)
 }
 
 pub fn read_text(path: &Path, max: usize) -> Result<String> {
