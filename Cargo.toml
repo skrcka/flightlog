@@ -1,0 +1,38 @@
+[package]
+name = "flightlog"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Record a coding-agent session (Claude Code, Codex, opencode) as a portable, redacted bundle — ATIF trajectory plus the native session for resume — and bring it back."
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/skrcka/flightlog"
+homepage = "https://flightlog.sh"
+exclude = ["site/", "packaging/", ".github/"]
+keywords = ["llm", "agents", "claude-code", "codex", "atif"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "flightlog"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+dirs = "5"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

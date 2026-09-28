@@ -1,0 +1,22 @@
+# Maintainer: flightlog authors <https://github.com/skrcka/flightlog>
+# AUR package "flightlog-bin". Update pkgver and the sha256sums from the
+# release's *.sha256 files, then `makepkg --printsrcinfo > .SRCINFO`.
+pkgname=flightlog-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Record coding-agent sessions as portable, redacted, resumable bundles"
+arch=('x86_64' 'aarch64')
+url="https://flightlog.sh"
+license=('MIT' 'Apache-2.0')
+provides=('flightlog')
+conflicts=('flightlog')
+source_x86_64=("flightlog-$pkgver-x86_64.tar.gz::https://github.com/skrcka/flightlog/releases/download/v$pkgver/flightlog-x86_64-unknown-linux-musl.tar.gz")
+source_aarch64=("flightlog-$pkgver-aarch64.tar.gz::https://github.com/skrcka/flightlog/releases/download/v$pkgver/flightlog-aarch64-unknown-linux-musl.tar.gz")
+sha256sums_x86_64=('REPLACE_WITH_SHA256')
+sha256sums_aarch64=('REPLACE_WITH_SHA256')
+
+package() {
+  install -Dm755 flightlog "$pkgdir/usr/bin/flightlog"
+  install -Dm644 LICENSE-MIT "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+  install -Dm644 LICENSE-APACHE "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
+}
