@@ -72,27 +72,19 @@ enum Cmd {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    /// Upload a bundle: to an Inside task, or PUT to any presigned URL.
+    /// Validate a bundle and PUT it to a presigned upload URL.
     Push {
         file: PathBuf,
-        /// Inside task key or id (uses INSIDE_URL, INSIDE_MCP_TOKEN).
-        #[arg(long, conflicts_with = "url")]
-        task: Option<String>,
         /// Presigned upload URL.
         #[arg(long)]
-        url: Option<String>,
-        #[arg(long)]
-        inside_url: Option<String>,
+        url: String,
     },
-    /// Download a task's bundle from Inside (newest unless --context).
+    /// Download a bundle from a URL (e.g. a signed download link) and
+    /// validate it.
     Pull {
-        task: String,
-        #[arg(long)]
-        context: Option<String>,
-        #[arg(short, long)]
-        output: Option<PathBuf>,
-        #[arg(long)]
-        inside_url: Option<String>,
+        url: String,
+        #[arg(short, long, default_value = "session.flightlog.zip")]
+        output: PathBuf,
     },
     /// Teach your agents to use flightlog: install its skills.
     Skills {
@@ -270,7 +262,12 @@ fn run() -> Result<()> {
             if let Err(p) = bundle::open(&built.bytes) {
                 bail!("the bundle does not validate:\n  - {}", p.join("\n  - "));
             }
-            println!("wrote {}", out.display());
+            println!(
+                "wrote {} ({} bytes, sha256 {})",
+                out.display(),
+                built.bytes.len(),
+                bundle::sha256_hex(&built.bytes)
+            );
         }
         Cmd::Inspect { file } => {
             let bytes = std::fs::read(&file)?;
@@ -337,84 +334,24 @@ fn run() -> Result<()> {
                 dir.display()
             );
         }
-        Cmd::Push {
-            file,
-            task,
-            url,
-            inside_url,
-        } => {
+        Cmd::Push { file, url } => {
             let bytes = std::fs::read(&file)?;
             if let Err(p) = bundle::open(&bytes) {
                 bail!("not pushing an invalid bundle:\n  - {}", p.join("\n  - "));
             }
-            let name = file
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned();
-            match (task, url) {
-                (Some(t), _) => {
-                    let rec =
-                        targets::inside::Inside::from_env(inside_url)?.push(&t, &name, &bytes)?;
-                    println!(
-                        "attached to {t} as context {}",
-                        rec["id"].as_str().unwrap_or("?")
-                    );
-                }
-                (None, Some(u)) => {
-                    targets::put(&u, &bytes)?;
-                    println!("uploaded");
-                }
-                _ => bail!("pass --task (Inside) or --url (presigned PUT)"),
-            }
+            targets::put(&url, &bytes)?;
+            println!("uploaded {} ({} bytes)", file.display(), bytes.len());
         }
-        Cmd::Pull {
-            task,
-            context,
-            output,
-            inside_url,
-        } => {
-            let inside = targets::inside::Inside::from_env(inside_url)?;
-            let items = inside.list(&task)?;
-            if items.is_empty() {
-                bail!("{task} has no bundles");
-            }
-            for it in &items {
-                println!(
-                    "{}  {}  {:<12} {}",
-                    it["id"].as_str().unwrap_or(""),
-                    it["createdAt"]
-                        .as_str()
-                        .unwrap_or("")
-                        .get(..16)
-                        .unwrap_or(""),
-                    it["source"]["tool"].as_str().unwrap_or(""),
-                    it["summary"]["goal"]
-                        .as_str()
-                        .unwrap_or("")
-                        .chars()
-                        .take(80)
-                        .collect::<String>()
+        Cmd::Pull { url, output } => {
+            let bytes = targets::get(&url)?;
+            if let Err(p) = bundle::open(&bytes) {
+                bail!(
+                    "the download is not a valid bundle:\n  - {}",
+                    p.join("\n  - ")
                 );
             }
-            let chosen = match &context {
-                Some(id) => items
-                    .iter()
-                    .find(|i| i["id"] == id.as_str())
-                    .context("no such context on this task")?,
-                None => &items[0],
-            };
-            let id = chosen["id"].as_str().unwrap_or("");
-            let bytes = inside.download(id)?;
-            let out = output.unwrap_or_else(|| {
-                PathBuf::from(
-                    chosen["filename"]
-                        .as_str()
-                        .unwrap_or("context.flightlog.zip"),
-                )
-            });
-            std::fs::write(&out, &bytes)?;
-            println!("downloaded {id} to {}", out.display());
+            std::fs::write(&output, &bytes)?;
+            println!("downloaded to {}", output.display());
         }
         Cmd::Skills {
             cmd: SkillsCmd::Install { agent, dir },

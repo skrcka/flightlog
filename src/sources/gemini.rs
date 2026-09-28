@@ -441,7 +441,7 @@ mod tests {
     #[test]
     fn slug_follows_gemini() {
         assert_eq!(slug("/home/me/My Project!"), "my-project");
-        assert_eq!(slug(r"C:\work\Inside2"), "inside2");
+        assert_eq!(slug(r"C:\work\Project2"), "project2");
         assert_eq!(slug("/"), "project");
     }
 }

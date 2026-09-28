@@ -52,7 +52,7 @@ agent, and later resume:
 | `flightlog extract FILE [-o DIR]` | Unpack; the conversation is `trajectory.json` |
 | `flightlog restore FILE` | Put the native session back and print the resume command (never overwrites without `--force`) |
 | `flightlog push FILE --url URL` | Upload to any presigned PUT URL |
-| `flightlog push FILE --task KEY` / `flightlog pull KEY` | Attach to / fetch from an [Inside](#inside) task |
+| `flightlog push FILE --url URL` / `flightlog pull URL` | Upload to a presigned URL / download and validate a bundle |
 
 ### Summaries
 
@@ -83,18 +83,19 @@ flightlog export --summary summary.json --reviewed
 | Cursor CLI | `~/.cursor/chats/<md5 of cwd>/<session>/store.db` |
 | Cursor editor | `Cursor/User/globalStorage/state.vscdb`, matched through `workspaceStorage/*/workspace.json` (read only, not resumable) |
 
-### Inside
+### Sharing through a tracker or storage
 
-[Inside](https://inside.speed-control.cz) stores bundles on tasks. With
-`INSIDE_URL` and `INSIDE_MCP_TOKEN` set:
+flightlog only moves bundles over plain HTTP; the service that stores them
+hands out the URLs. `flightlog export` prints the archive's size and SHA-256
+for services that ask for them up front.
 
 ```sh
-flightlog push abc.flightlog.zip --task PROJ-42
-flightlog pull PROJ-42 && flightlog restore <file>
+flightlog push abc.flightlog.zip --url '<presigned PUT URL>'
+flightlog pull '<signed download URL>' -o abc.flightlog.zip && flightlog restore abc.flightlog.zip
 ```
 
-Any other tracker can accept bundles the same way: hand out a presigned upload
-URL and use `flightlog push --url`.
+An agent with a tracker's tools (MCP or API) asks the tracker for the upload
+URL, runs `flightlog push`, and tells the tracker the upload is done.
 
 ## Teach your agent
 

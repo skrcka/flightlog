@@ -11,10 +11,10 @@ If `flightlog --version` fails, install it:
 ## Get the bundle
 
 - A file the user gave you: use it directly.
-- From an [Inside](https://inside.speed-control.cz) task (needs `INSIDE_URL`
-  and `INSIDE_MCP_TOKEN`):
+- From a URL (for example a signed download link that a task tracker's tools
+  gave you):
   ```bash
-  flightlog pull PROJ-42 -o ctx.flightlog.zip   # newest bundle; --context <id> for another
+  flightlog pull '<url>' -o ctx.flightlog.zip
   ```
 
 ## Read it (any agent, any tool)

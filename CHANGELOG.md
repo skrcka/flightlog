@@ -2,6 +2,10 @@
 
 ## [0.2.0] - 2026-09-28
 
+- `push` takes only `--url`; `pull <url>` downloads and validates a bundle.
+  Tracker-specific uploads are left to the agent and the tracker's own tools.
+  `export` prints the archive's size and SHA-256.
+- Only the `flightlog` format id is accepted.
 - Windows: release builds for x86-64 and arm64, `install.ps1`
   (`irm https://flightlog.sh/install.ps1 | iex`), path handling for
   `\\?\` prefixes, drive-letter case and opencode's npm shim.
@@ -25,4 +29,4 @@ First release.
 - Redaction of API keys, tokens, private keys, URL and `.env` passwords into
   stable `[REDACTED:<kind>:<n>]` placeholders, reported before sharing.
 - `inspect`, `validate`, `extract`, `restore`, `list`.
-- `push`/`pull`: any presigned URL, or an Inside task.
+- `push`/`pull`: presigned upload and download URLs.

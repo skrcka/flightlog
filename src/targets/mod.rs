@@ -1,6 +1,4 @@
-//! Where bundles go: any presigned URL, or an Inside task.
-
-pub mod inside;
+//! Moving bundles over HTTP: PUT to a presigned URL, GET from a signed one.
 
 use anyhow::{bail, Result};
 

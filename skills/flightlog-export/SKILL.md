@@ -48,10 +48,10 @@ irm https://flightlog.sh/install.ps1 | iex          # Windows
    `[REDACTED:password:1]`, counts and files). Ask whether anything else
    should not be shared before going further.
 4. **Share**, only once the user agrees:
-   - Attach to an [Inside](https://inside.speed-control.cz) task (needs
-     `INSIDE_URL` and `INSIDE_MCP_TOKEN`):
-     `flightlog push session.flightlog.zip --task PROJ-42`
-   - Upload to a presigned URL: `flightlog push session.flightlog.zip --url '<url>'`
+   - Upload to a presigned URL: `flightlog push session.flightlog.zip --url '<url>'`.
+     To attach it to a task in a tracker you have tools for, ask the tracker
+     for an upload URL (the export printed the size and SHA-256 it may
+     want), push, then tell the tracker the upload is complete.
    - Or just tell the user where the file is.
 5. Delete `summary.json` (and the zip, once uploaded) when done.
 

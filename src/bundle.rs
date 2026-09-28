@@ -14,7 +14,6 @@ use crate::sources::Converted;
 
 pub const FORMAT: &str = "flightlog";
 /// Earlier name of the same format, still accepted on read.
-pub const FORMAT_LEGACY: &str = "inside.llm-context";
 pub const FORMAT_VERSION: &str = "1.0";
 
 pub const MAX_ARCHIVE_BYTES: usize = 100 * 1024 * 1024;
@@ -270,7 +269,7 @@ pub fn open(bytes: &[u8]) -> std::result::Result<Bundle, Vec<String>> {
             return Err(problems);
         }
     };
-    if manifest["format"] != FORMAT && manifest["format"] != FORMAT_LEGACY {
+    if manifest["format"] != FORMAT {
         problems.push(format!("manifest.format must be \"{FORMAT}\""));
     }
     if manifest["format_version"]

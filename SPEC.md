@@ -10,8 +10,7 @@ the tool it came from. The conversation is stored in the open **ATIF** format
 flightlog adds a manifest with a summary, a redaction report and checksums, and
 optionally the tool's own session files for exact resume.
 
-MUST, SHOULD and MAY are used as in RFC 2119. Earlier bundles used the format
-id `inside.llm-context` for the same structure; readers SHOULD accept both.
+MUST, SHOULD and MAY are used as in RFC 2119.
 
 ## 1. Container
 
@@ -161,7 +160,7 @@ directory holding the same repository.
 ## 6. Reading checklist
 
 1. Open the ZIP; reject unsafe paths and oversized content.
-2. Require `format` `flightlog` (or `inside.llm-context`) and version 1.x.
+2. Require `format` `flightlog` and version 1.x.
 3. Verify every `files[]` checksum; ignore unlisted files.
 4. Require ATIF `schema_version` `ATIF-v1.*`; iterate `steps` in order,
    joining `tool_calls` with `observation.results`.
