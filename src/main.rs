@@ -232,7 +232,7 @@ fn run() -> Result<()> {
         } => {
             let cwd = cwd_of(cwd)?;
             let s = sources::pick(tool, session.as_deref(), &cwd)?;
-            let c = sources::convert(&s)?;
+            let c = sources::convert(&s, &cwd)?;
             let mut summary_v = match summary {
                 Some(p) => serde_json::from_slice(
                     &std::fs::read(&p).with_context(|| format!("read {}", p.display()))?,

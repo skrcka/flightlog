@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 
 use crate::bundle::Bundle;
-use crate::sources::{cwd_slug, home};
+use crate::sources::{cursor, cwd_slug, gemini, home};
 
 pub struct Restored {
     pub written: Vec<PathBuf>,
@@ -13,12 +13,15 @@ pub struct Restored {
     pub next: String,
 }
 
-fn expand(template: &str, cwd: &str) -> PathBuf {
-    let t = template.replace("{cwd_slug}", &cwd_slug(cwd));
-    match t.strip_prefix("~/") {
+fn expand(template: &str, cwd: &str) -> Result<PathBuf> {
+    let mut t = template.replace("{cwd_slug}", &cwd_slug(cwd));
+    if t.contains("{gemini_project}") {
+        t = t.replace("{gemini_project}", &gemini::project_for_restore(cwd)?);
+    }
+    Ok(match t.strip_prefix("~/") {
         Some(rest) => home().join(rest),
         None => PathBuf::from(t),
-    }
+    })
 }
 
 /// Restore into the current machine. Existing files are never overwritten
@@ -30,6 +33,21 @@ pub fn restore(b: &Bundle, cwd: &str, work_dir: &Path, force: bool) -> Result<Re
     }
     let layout = native["layout"].as_str().unwrap_or("");
     let mut written = Vec::new();
+    if layout == cursor::CLI_LAYOUT {
+        let (_, bytes) = b
+            .files
+            .iter()
+            .find(|(n, _)| n.starts_with("native/"))
+            .context("Cursor bundle without its store dump")?;
+        let id = b.manifest["source"]["session_id"].as_str().unwrap_or("");
+        let dir = cursor::restore_cli(bytes, id, cwd, force)?;
+        written.push(dir.join("store.db"));
+        written.push(dir.join("meta.json"));
+        return Ok(Restored {
+            written,
+            next: native["resume_command"].as_str().unwrap_or("").to_string(),
+        });
+    }
     if layout == "opencode/export-v1" {
         let (name, bytes) = b
             .files
@@ -57,7 +75,7 @@ pub fn restore(b: &Bundle, cwd: &str, work_dir: &Path, force: bool) -> Result<Re
             .files
             .get(src)
             .with_context(|| format!("native file missing from bundle: {src}"))?;
-        let dest = expand(to, cwd);
+        let dest = expand(to, cwd)?;
         if dest.exists() && !force {
             bail!(
                 "{} already exists; it is probably the original session. Use --force to overwrite.",

@@ -2,6 +2,8 @@
 
 pub mod claude;
 pub mod codex;
+pub mod cursor;
+pub mod gemini;
 pub mod opencode;
 
 use std::collections::BTreeSet;
@@ -16,10 +18,18 @@ pub enum Tool {
     Claude,
     Codex,
     Opencode,
+    Gemini,
+    Cursor,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 3] = [Tool::Claude, Tool::Codex, Tool::Opencode];
+    pub const ALL: [Tool; 5] = [
+        Tool::Claude,
+        Tool::Codex,
+        Tool::Opencode,
+        Tool::Gemini,
+        Tool::Cursor,
+    ];
 
     /// `source.tool` in the manifest (spec §2.1).
     pub fn id(self) -> &'static str {
@@ -27,6 +37,8 @@ impl Tool {
             Tool::Claude => "claude_code",
             Tool::Codex => "codex",
             Tool::Opencode => "opencode",
+            Tool::Gemini => "gemini_cli",
+            Tool::Cursor => "cursor",
         }
     }
 }
@@ -133,6 +145,8 @@ pub fn list(tool: Tool, cwd: &str) -> Result<Vec<SessionRef>> {
         Tool::Claude => claude::list(cwd),
         Tool::Codex => codex::list(cwd),
         Tool::Opencode => opencode::list(cwd),
+        Tool::Gemini => gemini::list(cwd),
+        Tool::Cursor => cursor::list(cwd),
     }
 }
 
@@ -146,6 +160,8 @@ pub fn pick(tool: Option<Tool>, session: Option<&str>, cwd: &str) -> Result<Sess
             Some(id) => match t {
                 Tool::Claude => claude::by_id(id).into_iter().collect(),
                 Tool::Codex => codex::by_id(id).into_iter().collect(),
+                Tool::Gemini => gemini::by_id(id).into_iter().collect(),
+                Tool::Cursor => cursor::by_id(id, cwd).into_iter().collect(),
                 Tool::Opencode => opencode::list(cwd)?
                     .into_iter()
                     .filter(|s| s.id == id)
@@ -165,11 +181,13 @@ pub fn pick(tool: Option<Tool>, session: Option<&str>, cwd: &str) -> Result<Sess
     }
 }
 
-pub fn convert(s: &SessionRef) -> Result<Converted> {
+pub fn convert(s: &SessionRef, cwd: &str) -> Result<Converted> {
     match s.tool {
         Tool::Claude => claude::convert(s),
         Tool::Codex => codex::convert(s),
         Tool::Opencode => opencode::convert(s),
+        Tool::Gemini => gemini::convert(s),
+        Tool::Cursor => cursor::convert(s, cwd),
     }
 }
 

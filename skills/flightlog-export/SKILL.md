@@ -1,6 +1,6 @@
 ---
 name: flightlog-export
-description: Save the current coding-agent session (Claude Code, Codex or opencode) as a portable, redacted flightlog bundle, and optionally upload it to a task tracker or presigned URL. Use when the user asks to save, export, hand off, share or attach this session or its context (e.g. "export this session", "attach this session to PROJ-42").
+description: Save the current coding-agent session (Claude Code, Codex, opencode, Gemini CLI or Cursor) as a portable, redacted flightlog bundle, and optionally upload it to a task tracker or presigned URL. Use when the user asks to save, export, hand off, share or attach this session or its context (e.g. "export this session", "attach this session to PROJ-42").
 ---
 
 # Export this session with flightlog
@@ -9,10 +9,14 @@ description: Save the current coding-agent session (Claude Code, Codex or openco
 bundle: the conversation as an ATIF trajectory, a summary, a redaction report,
 and the tool's own session files so it can be resumed later.
 
-If `flightlog --version` fails, install it (single binary, macOS/Linux):
+If `flightlog --version` fails, install it (a single binary):
 
 ```bash
-curl -fsSL https://flightlog.sh/install.sh | sh
+curl -fsSL https://flightlog.sh/install.sh | sh     # macOS, Linux
+```
+
+```powershell
+irm https://flightlog.sh/install.ps1 | iex          # Windows
 ```
 
 ## Steps
@@ -37,7 +41,7 @@ curl -fsSL https://flightlog.sh/install.sh | sh
    flightlog export --summary summary.json -o session.flightlog.zip
    ```
    It picks the newest session for this directory. `flightlog list` shows
-   the others; pick one with `--tool claude|codex|opencode --session <id>`.
+   the others; pick one with `--tool claude|codex|opencode|gemini|cursor --session <id>`.
    `--no-native` leaves out the tool's own files (the bundle can then be read
    but not resumed).
 3. **Show the user the redaction report** it printed (placeholders like

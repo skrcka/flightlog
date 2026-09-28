@@ -138,6 +138,21 @@ MUST ignore `native/`.
 | `claude_code/projects-v1` | `<id>.jsonl` and the `<id>/` folder from `~/.claude/projects/<cwd_slug>/` | `claude --resume <id>` |
 | `codex/rollout-v1` | `rollout-<ts>-<id>.jsonl` from `~/.codex/sessions/YYYY/MM/DD/` | `codex resume <id>` |
 | `opencode/export-v1` | the JSON of `opencode export <id>` | `opencode import <file>` |
+| `gemini-cli/chats-v1` | `session-<ts>-<id8>.jsonl` from `~/.gemini/tmp/<project>/chats/` | `gemini --resume <id>` |
+| `cursor/chats-v1` | `<id>.cursor-store.json`: a JSON dump of the Cursor CLI's `store.db` (below) | `cursor-agent --resume <id>` |
+
+`{gemini_project}` is Gemini CLI's folder for the working directory: its entry
+in `~/.gemini/projects.json`, or a new one registered the way Gemini CLI does
+(the folder name lowercased, other characters as `-`).
+
+The Cursor CLI keeps a session in SQLite (`~/.cursor/chats/<md5(cwd)>/<id>/store.db`),
+which cannot be redacted as text. The bundle carries it as JSON instead,
+`{"format": "flightlog.cursor-store/1", "schema": [CREATE TABLE …],
+"meta_json": {…}, "store_meta": {…}, "blobs": [{"id", "json" | "hex"}]}`:
+message blobs as JSON values (redacted like any text), tree blobs as hex. A
+restore rebuilds `store.db` and `meta.json` under the new directory's hash.
+Chats of the Cursor editor are exported without native files: they live in
+the editor's own database, which is not safe to write while it runs.
 
 `{cwd_slug}` is the working directory with every non-alphanumeric character
 replaced by `-`. Paths inside a session are absolute: resume works in a

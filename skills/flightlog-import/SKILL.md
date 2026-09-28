@@ -1,6 +1,6 @@
 ---
 name: flightlog-import
-description: Load a flightlog bundle of an earlier coding-agent session — read its summary and conversation to continue the work, or restore the original session so Claude Code, Codex or opencode can resume it. Use when the user gives a .flightlog.zip, asks to pick up or continue earlier work, or refers to a session/context attached to a task (e.g. "continue where PROJ-42 left off").
+description: Load a flightlog bundle of an earlier coding-agent session — read its summary and conversation to continue the work, or restore the original session so Claude Code, Codex, opencode, Gemini CLI or the Cursor CLI can resume it. Use when the user gives a .flightlog.zip, asks to pick up or continue earlier work, or refers to a session/context attached to a task (e.g. "continue where PROJ-42 left off").
 ---
 
 # Import a session with flightlog
@@ -41,8 +41,8 @@ flightlog restore ctx.flightlog.zip
 ```
 
 It puts the tool's session files back (never overwriting without `--force`)
-and prints the command to run: `claude --resume <id>`, `codex resume <id>` or
-`opencode import <file>`. Tell the user to run it; a session cannot be resumed
+and prints the command to run: `claude --resume <id>`, `codex resume <id>`,
+`opencode import <file>`, `gemini --resume <id>` or `cursor-agent --resume <id>`. Tell the user to run it; a session cannot be resumed
 from inside another one.
 
 **The format.** A bundle is a ZIP with `manifest.json`, `trajectory.json`

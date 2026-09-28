@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>flightlog</title>
-<meta name="description" content="Record a coding-agent session (Claude Code, Codex, opencode) as a portable, redacted bundle and resume it later.">
+<meta name="description" content="Record a coding-agent session (Claude Code, Codex, opencode, Gemini CLI, Cursor) as a portable, redacted bundle and resume it later.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23e8590c'/><path d='M8 20l8-9 8 9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 <style>
   :root {
@@ -56,7 +56,7 @@
   <h1>flight<span>log</span></h1>
   <p class="lede">Record a coding-agent session as a portable, redacted bundle.
     Hand it to a colleague or another agent, attach it to a ticket, and resume it
-    later in Claude Code, Codex or opencode.</p>
+    later in Claude Code, Codex, opencode, Gemini CLI or Cursor.</p>
 
   <div class="os" role="group" aria-label="Operating system">
     <button type="button" data-os="unix" aria-pressed="true">macOS / Linux</button>
@@ -91,9 +91,20 @@ flightlog restore df9d8089….flightlog.zip
   </div>
 
   <h2>Works with</h2>
-  <p>Claude Code, Codex and opencode today; Cursor and Gemini CLI are next.
+  <p>Claude Code, Codex, opencode, Gemini CLI and Cursor (CLI and editor), on macOS, Linux and Windows.
     Bundles upload to any presigned URL, or straight to a task in
     <a href="https://inside.speed-control.cz">Inside</a>.</p>
+
+  <h2>Teach your agent</h2>
+  <p>Two skills tell an agent how to save its session and how to pick one up again.</p>
+<pre>flightlog skills install     <span class="c"># Claude Code, Codex, opencode, Copilot, Cursor, Gemini CLI</span>
+
+<span class="c"># or as a plugin</span>
+claude plugin marketplace add skrcka/flightlog
+codex plugin marketplace add skrcka/flightlog
+gemini extensions install https://github.com/skrcka/flightlog</pre>
+  <p class="alt">The bundle format is open: <a href="https://github.com/skrcka/flightlog/blob/main/SPEC.md">SPEC.md</a>,
+    with the conversation in <a href="https://github.com/harbor-framework/harbor/blob/main/rfcs/0001-trajectory-format.md">ATIF v1.8</a>.</p>
 
   <footer>MIT OR Apache-2.0 · <a href="https://github.com/skrcka/flightlog">github.com/skrcka/flightlog</a></footer>
 </main>

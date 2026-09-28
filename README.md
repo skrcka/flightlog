@@ -1,6 +1,7 @@
 # flightlog
 
-Record a coding-agent session — **Claude Code, Codex, opencode** — as a
+Record a coding-agent session — **Claude Code, Codex, opencode, Gemini CLI,
+Cursor** — as a
 portable, redacted bundle, and bring it back: read it anywhere, or resume it in
 the tool it came from.
 
@@ -35,7 +36,8 @@ agent, and later resume:
   passwords become stable `[REDACTED:<kind>:<n>]` placeholders; you see the
   report before anything leaves your machine.
 - **Resumable.** The tool's own session files ride along, so `restore` puts
-  them back and `claude --resume`, `codex resume` or `opencode import` picks up
+  them back and `claude --resume`, `codex resume`, `opencode import`,
+  `gemini --resume` or `cursor-agent --resume` picks up
   exactly where it stopped.
 - **One static binary.** No Python or Node needed.
 
@@ -44,7 +46,7 @@ agent, and later resume:
 | Command | What it does |
 |---|---|
 | `flightlog list` | Sessions recorded for this directory, newest first |
-| `flightlog export [--tool claude\|codex\|opencode] [--session ID]` | Build a bundle; `--summary summary.json` or `--goal/--state` add the summary, `--no-native` leaves out the resumable files |
+| `flightlog export [--tool claude\|codex\|opencode\|gemini\|cursor] [--session ID]` | Build a bundle; `--summary summary.json` or `--goal/--state` add the summary, `--no-native` leaves out the resumable files |
 | `flightlog inspect FILE` | Summary, source, stats, redaction report |
 | `flightlog validate FILE` | Check against the spec (exit 1 with every problem) |
 | `flightlog extract FILE [-o DIR]` | Unpack; the conversation is `trajectory.json` |
@@ -77,6 +79,9 @@ flightlog export --summary summary.json --reviewed
 | Claude Code | `~/.claude/projects/<cwd with non-alphanumerics as ->/<session>.jsonl` (+ `<session>/` subagents) |
 | Codex | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl`, matched on `cwd` |
 | opencode | `opencode session list` / `opencode export` |
+| Gemini CLI | `~/.gemini/tmp/<project>/chats/session-*.jsonl` (project from `~/.gemini/projects.json`) |
+| Cursor CLI | `~/.cursor/chats/<md5 of cwd>/<session>/store.db` |
+| Cursor editor | `Cursor/User/globalStorage/state.vscdb`, matched through `workspaceStorage/*/workspace.json` (read only, not resumable) |
 
 ### Inside
 
@@ -127,8 +132,10 @@ opencode, Cursor and Gemini CLI also read `~/.agents/skills`, where
 ## Status
 
 Early. Converters track formats the tools change without notice; please open
-an issue with the tool version when an export looks wrong. Planned: Cursor and
-Gemini CLI, cross-tool resume, more redaction rules.
+an issue with the tool version when an export looks wrong. Gemini CLI and
+Cursor support is new and built from their documented storage; reports from
+real sessions are especially welcome. Planned: cross-tool resume, more
+redaction rules.
 
 ## License
 
