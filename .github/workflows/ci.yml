@@ -30,7 +30,15 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets -- -D warnings
-      - run: cargo test --locked
+      - name: run tests
+        id: tests
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked 2>&1 | tee "$RUNNER_TEMP/flightlog-tests.log"
+      - name: annotate test failures
+        if: failure() && steps.tests.outcome == 'failure'
+        run: python3 scripts/report-test-failures.py
       - if: runner.os == 'Linux'
         name: man pages are up to date
         run: |
