@@ -43,6 +43,9 @@ agent, and later resume:
 
 ## Commands
 
+`flightlog --help` and `flightlog <command> --help` describe each one;
+`man flightlog` has the same plus files and environment variables.
+
 | Command | What it does |
 |---|---|
 | `flightlog list` | Sessions recorded for this directory, newest first |
@@ -127,7 +130,7 @@ opencode, Cursor and Gemini CLI also read `~/.agents/skills`, where
   `%LOCALAPPDATA%\flightlog\bin`, which the script adds to the user `PATH`).
 - **Release archives:** [GitHub releases](https://github.com/skrcka/flightlog/releases),
   each with a `.sha256`.
-- **Cargo:** `cargo install flightlog`
+- **Cargo:** `cargo install flightlog` (no man pages; `flightlog --help` has the same text)
 - **From source:** `cargo build --release`
 
 ## Status

@@ -5,6 +5,7 @@
 #
 # FLIGHTLOG_VERSION=0.1.0   pin a version (default: latest release)
 # FLIGHTLOG_INSTALL_DIR=…   where the binary goes (default: ~/.local/bin)
+# FLIGHTLOG_MAN_DIR=…       where man pages go (default: <install dir>/../share/man)
 set -eu
 
 REPO="skrcka/flightlog"
@@ -50,6 +51,13 @@ tar -xzf "$tmp/$asset" -C "$tmp"
 mkdir -p "$BIN_DIR"
 install -m 755 "$tmp/flightlog" "$BIN_DIR/flightlog" 2>/dev/null || { cp "$tmp/flightlog" "$BIN_DIR/flightlog"; chmod 755 "$BIN_DIR/flightlog"; }
 say "installed $("$BIN_DIR/flightlog" --version) to $BIN_DIR"
+
+if [ -d "$tmp/man" ]; then
+  MAN_DIR="${FLIGHTLOG_MAN_DIR:-$(dirname "$BIN_DIR")/share/man}"
+  if mkdir -p "$MAN_DIR/man1" 2>/dev/null && cp "$tmp"/man/*.1 "$MAN_DIR/man1/" 2>/dev/null; then
+    say "man pages in $MAN_DIR/man1 (man flightlog)"
+  fi
+fi
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;

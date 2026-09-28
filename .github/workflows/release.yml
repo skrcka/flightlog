@@ -43,7 +43,7 @@ jobs:
           target: ${{ matrix.target }}
           archive: flightlog-$target
           checksum: sha256
-          include: LICENSE-MIT,LICENSE-APACHE,README.md
+          include: LICENSE-MIT,LICENSE-APACHE,README.md,man
           token: ${{ secrets.GITHUB_TOKEN }}
 
   publish-crate:

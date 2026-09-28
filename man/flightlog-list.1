@@ -1,0 +1,37 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH flightlog-list 1 2026-09-28 "flightlog 0.2.1" "flightlog manual"
+.SH NAME
+flightlog\-list \- List sessions recorded for a directory, newest first
+.SH SYNOPSIS
+\fBflightlog list\fR [\fB\-\-tool\fR] [\fB\-\-cwd\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+List sessions recorded for a directory, newest first
+.SH OPTIONS
+.TP
+\fB\-\-tool\fR \fI<TOOL>\fR
+Only this tool\*(Aqs sessions
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+claude: Claude Code
+.IP \(bu 2
+codex: OpenAI Codex CLI
+.IP \(bu 2
+opencode: opencode
+.IP \(bu 2
+gemini: Gemini CLI
+.IP \(bu 2
+cursor: Cursor CLI (cursor\-agent) and the Cursor editor
+.RE
+.TP
+\fB\-\-cwd\fR \fI<DIR>\fR
+Directory the sessions ran in [default: current directory]
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH SEE ALSO
+.BR flightlog (1)

@@ -48,6 +48,7 @@ class Flightlog < Formula
 
   def install
     bin.install "flightlog"
+    man1.install Dir["man/*.1"]
   end
 
   test do
@@ -75,6 +76,7 @@ sha256sums_aarch64=('$lin_arm')
 
 package() {
   install -Dm755 flightlog "\$pkgdir/usr/bin/flightlog"
+  install -Dm644 -t "\$pkgdir/usr/share/man/man1" man/*.1
   install -Dm644 LICENSE-MIT "\$pkgdir/usr/share/licenses/\$pkgname/LICENSE-MIT"
   install -Dm644 LICENSE-APACHE "\$pkgdir/usr/share/licenses/\$pkgname/LICENSE-APACHE"
 }

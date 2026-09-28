@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1] - 2026-09-28
+
+- Clearer `--help`: a one-line summary per command, longer descriptions and
+  examples with `--help`, commands in workflow order, the agent skills
+  mentioned up front.
+- Man pages (`man flightlog`, `man flightlog-export`, …) in the release
+  archives, installed by `install.sh` to `~/.local/share/man`.
+
 ## [0.2.0] - 2026-09-28
 
 - `push` takes only `--url`; `pull <url>` downloads and validates a bundle.

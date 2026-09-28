@@ -3,6 +3,7 @@
 
 mod atif;
 mod bundle;
+mod man;
 mod redact;
 mod restore;
 mod skills;
@@ -12,13 +13,38 @@ mod targets;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use serde_json::{json, Value};
 
 use sources::Tool;
 
+const AFTER_HELP: &str = "\
+Examples:
+  flightlog list                                  sessions recorded for this directory
+  flightlog export --goal 'Fix login' --state 'Done; needs review'
+  flightlog inspect <id>.flightlog.zip            summary, stats, what was redacted
+  flightlog restore <id>.flightlog.zip            put it back, print the resume command
+
+Teach your agent to do this itself:
+  flightlog skills install
+
+Format: https://github.com/skrcka/flightlog/blob/main/SPEC.md
+Docs:   https://flightlog.sh  ·  man flightlog";
+
 #[derive(Parser)]
-#[command(name = "flightlog", version, about, long_about = None)]
+#[command(
+    name = "flightlog",
+    version,
+    about = "Save coding-agent sessions as portable, redacted bundles, and bring them back",
+    long_about = "Save coding-agent sessions as portable, redacted bundles, and bring them back.\n\n\
+        flightlog reads a session of Claude Code, Codex, opencode, Gemini CLI or Cursor \
+        and writes one .flightlog.zip: the conversation as an ATIF trajectory, a summary \
+        for whoever picks it up, a redaction report, and the tool's own session files so \
+        the session can be resumed. Secrets are replaced with [REDACTED:<kind>:<n>] \
+        placeholders before anything is written.",
+    after_help = AFTER_HELP,
+    disable_help_subcommand = true
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -26,98 +52,171 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// List agent sessions recorded for a directory (newest first).
+    /// List sessions recorded for a directory, newest first
+    #[command(display_order = 1)]
     List {
-        #[arg(long, value_enum)]
+        /// Only this tool's sessions
+        #[arg(long, value_enum, value_name = "TOOL")]
         tool: Option<Tool>,
-        /// Directory the sessions ran in (default: current).
-        #[arg(long)]
+        /// Directory the sessions ran in [default: current directory]
+        #[arg(long, value_name = "DIR")]
         cwd: Option<PathBuf>,
     },
-    /// Export a session to a redacted .flightlog.zip bundle.
+    /// Export a session to a redacted .flightlog.zip
+    #[command(
+        display_order = 2,
+        long_about = "Export a session to a redacted .flightlog.zip.\n\n\
+            Picks the newest session recorded for the directory (any tool) unless \
+            --tool or --session say otherwise. Prints the redaction report, then the \
+            file's size and SHA-256. Review the report before sharing the bundle.",
+        after_help = "Examples:\n  \
+            flightlog export --goal 'Migrate auth to OIDC' --state 'Login works; logout TODO'\n  \
+            flightlog export --summary summary.json --reviewed -o handoff.flightlog.zip\n  \
+            flightlog export --tool codex --session <id> --no-native"
+    )]
     Export {
-        #[arg(long, value_enum)]
+        /// Tool the session belongs to [default: whichever has the newest session]
+        #[arg(long, value_enum, value_name = "TOOL")]
         tool: Option<Tool>,
-        /// Session id (default: the newest session for --cwd).
-        #[arg(long)]
+        /// Session id [default: the newest session for the directory]
+        #[arg(long, value_name = "ID")]
         session: Option<String>,
-        #[arg(long)]
+        /// Directory the session ran in [default: current directory]
+        #[arg(long, value_name = "DIR")]
         cwd: Option<PathBuf>,
-        /// JSON summary: {goal, state, decisions, open_questions, next_steps, files_touched}.
-        #[arg(long)]
+        /// Summary as JSON: {goal, state, decisions, open_questions, next_steps, files_touched}
+        #[arg(long, value_name = "FILE", help_heading = "Summary")]
         summary: Option<PathBuf>,
-        /// Summary goal (instead of --summary).
-        #[arg(long)]
+        /// What the session set out to do (instead of --summary)
+        #[arg(long, value_name = "TEXT", help_heading = "Summary")]
         goal: Option<String>,
-        /// Summary state (instead of --summary).
-        #[arg(long)]
+        /// Where it stands now (instead of --summary)
+        #[arg(long, value_name = "TEXT", help_heading = "Summary")]
         state: Option<String>,
-        /// Output file (default: <session>.flightlog.zip).
-        #[arg(short, long)]
+        /// Output file [default: <session>.flightlog.zip]
+        #[arg(short, long, value_name = "FILE")]
         output: Option<PathBuf>,
-        /// Leave out the tool's own session files (readable, not resumable).
+        /// Leave out the tool's own session files: readable, but not resumable
         #[arg(long)]
         no_native: bool,
-        /// Record that the redaction report was reviewed.
+        /// Record in the bundle that a person reviewed the redaction report
         #[arg(long)]
         reviewed: bool,
     },
-    /// Show a bundle's summary, source, stats and redaction report.
-    Inspect { file: PathBuf },
-    /// Check a bundle against the format (exit 1 with every problem).
-    Validate { file: PathBuf },
-    /// Extract a bundle's files into a directory.
-    Extract {
+    /// Show a bundle's summary, source, stats and redaction report
+    #[command(display_order = 3)]
+    Inspect {
+        /// The .flightlog.zip
         file: PathBuf,
-        #[arg(short, long)]
+    },
+    /// Check a bundle against the format; exits 1 listing every problem
+    #[command(display_order = 4)]
+    Validate {
+        /// The .flightlog.zip
+        file: PathBuf,
+    },
+    /// Unpack a bundle into a directory (the conversation is trajectory.json)
+    #[command(display_order = 5)]
+    Extract {
+        /// The .flightlog.zip
+        file: PathBuf,
+        /// Target directory [default: the file name without .zip]
+        #[arg(short, long, value_name = "DIR")]
         output: Option<PathBuf>,
     },
-    /// Validate a bundle and PUT it to a presigned upload URL.
-    Push {
+    /// Put a bundle's session back so its tool can resume it
+    #[command(
+        display_order = 6,
+        long_about = "Put a bundle's session back so its tool can resume it.\n\n\
+            Writes the tool's own session files where it looks for them (never \
+            overwriting without --force) and prints the command to run: \
+            claude --resume, codex resume, opencode import, gemini --resume or \
+            cursor-agent --resume. Paths inside a session are absolute, so resume in \
+            a directory holding the same repository."
+    )]
+    Restore {
+        /// The .flightlog.zip
         file: PathBuf,
-        /// Presigned upload URL.
+        /// Directory to resume in [default: current directory]
+        #[arg(long, value_name = "DIR")]
+        cwd: Option<PathBuf>,
+        /// Overwrite session files that already exist
         #[arg(long)]
+        force: bool,
+    },
+    /// Upload a bundle to a presigned URL (validated first)
+    #[command(display_order = 7)]
+    Push {
+        /// The .flightlog.zip
+        file: PathBuf,
+        /// Presigned upload URL (HTTP PUT)
+        #[arg(long, value_name = "URL")]
         url: String,
     },
-    /// Download a bundle from a URL (e.g. a signed download link) and
-    /// validate it.
+    /// Download a bundle from a URL and validate it
+    #[command(display_order = 8)]
     Pull {
+        /// Download URL, e.g. a signed link
         url: String,
-        #[arg(short, long, default_value = "session.flightlog.zip")]
+        /// Where to save it
+        #[arg(
+            short,
+            long,
+            value_name = "FILE",
+            default_value = "session.flightlog.zip"
+        )]
         output: PathBuf,
     },
-    /// Teach your agents to use flightlog: install its skills.
+    /// Install the agent skills that teach agents to export and import sessions
+    #[command(
+        display_order = 9,
+        long_about = "Install the agent skills that teach agents to export and import sessions.\n\n\
+            Two skills, flightlog-export and flightlog-import, tell an agent how to save \
+            its own session (with a summary it writes) and how to pick one up again. \
+            They are built into this binary. Agents can also get them as a plugin: \
+            claude|codex|copilot plugin marketplace add skrcka/flightlog, or \
+            gemini extensions install https://github.com/skrcka/flightlog."
+    )]
     Skills {
         #[command(subcommand)]
         cmd: SkillsCmd,
     },
-    /// Put a bundle's native session back so its tool can resume it.
-    Restore {
-        file: PathBuf,
-        /// Directory to resume in (default: current; must hold the same repository).
-        #[arg(long)]
-        cwd: Option<PathBuf>,
-        /// Overwrite existing session files.
-        #[arg(long)]
-        force: bool,
+    /// Write man pages (for packaging)
+    #[command(hide = true)]
+    Man {
+        /// Directory for flightlog.1 and flightlog-<command>.1
+        #[arg(long, value_name = "DIR", default_value = "man")]
+        dir: PathBuf,
     },
 }
 
 #[derive(Subcommand)]
 enum SkillsCmd {
-    /// Install the flightlog-export and flightlog-import skills into
-    /// ~/.agents/skills and each agent's skill folder (default: every agent
-    /// found on this machine).
+    /// Install the skills for every agent found here, or the ones named
+    #[command(
+        long_about = "Install the skills for every agent found here, or the ones named.\n\n\
+            Always writes ~/.agents/skills (read by opencode, Copilot, Cursor, Gemini CLI \
+            and Codex), plus the skill folder of each agent whose config directory \
+            exists. Restart the agent afterwards.",
+        after_help = "Examples:\n  \
+            flightlog skills install\n  \
+            flightlog skills install --agent claude,codex\n  \
+            flightlog skills install --dir .claude/skills      # this project only"
+    )]
     Install {
-        /// Only these agents.
-        #[arg(long, value_enum, value_delimiter = ',')]
+        /// Only these agents (comma-separated)
+        #[arg(long, value_enum, value_delimiter = ',', value_name = "AGENT")]
         agent: Vec<skills::Agent>,
-        /// Install into this directory instead.
-        #[arg(long)]
+        /// Install into this directory instead
+        #[arg(long, value_name = "DIR")]
         dir: Option<PathBuf>,
     },
-    /// Print a skill's SKILL.md (default: flightlog-export).
-    Show { name: Option<String> },
+    /// Print a skill's SKILL.md
+    Show {
+        /// flightlog-export or flightlog-import
+        #[arg(default_value = "flightlog-export")]
+        name: String,
+    },
 }
 
 fn cwd_of(p: Option<PathBuf>) -> Result<String> {
@@ -353,6 +452,11 @@ fn run() -> Result<()> {
             std::fs::write(&output, &bytes)?;
             println!("downloaded to {}", output.display());
         }
+        Cmd::Man { dir } => {
+            for f in man::write_all(&Cli::command(), &dir)? {
+                println!("{}", f.display());
+            }
+        }
         Cmd::Skills {
             cmd: SkillsCmd::Install { agent, dir },
         } => {
@@ -372,7 +476,6 @@ fn run() -> Result<()> {
         Cmd::Skills {
             cmd: SkillsCmd::Show { name },
         } => {
-            let name = name.unwrap_or_else(|| "flightlog-export".into());
             let (_, body) = skills::SKILLS
                 .iter()
                 .find(|(n, _)| *n == name)

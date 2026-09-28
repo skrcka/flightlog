@@ -15,10 +15,15 @@ use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Tool {
+    /// Claude Code
     Claude,
+    /// OpenAI Codex CLI
     Codex,
+    /// opencode
     Opencode,
+    /// Gemini CLI
     Gemini,
+    /// Cursor CLI (cursor-agent) and the Cursor editor
     Cursor,
 }
 

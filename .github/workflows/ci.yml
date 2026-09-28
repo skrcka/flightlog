@@ -19,6 +19,11 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
+      - if: runner.os == 'Linux'
+        name: man pages are up to date
+        run: |
+          cargo run -q -- man --dir man
+          git diff --exit-code -- man || { echo "::error::run 'cargo run -- man' and commit man/"; exit 1; }
       - if: runner.os != 'Windows'
         run: sh -n install.sh
       - if: runner.os == 'Windows'

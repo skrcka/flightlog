@@ -20,11 +20,17 @@ pub const SKILLS: &[(&str, &str)] = &[
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Agent {
+    /// Claude Code: ~/.claude/skills
     Claude,
+    /// Codex: ~/.codex/skills
     Codex,
+    /// opencode: ~/.config/opencode/skills
     Opencode,
+    /// GitHub Copilot CLI: ~/.copilot/skills
     Copilot,
+    /// Cursor: ~/.cursor/skills
     Cursor,
+    /// Gemini CLI: ~/.gemini/skills
     Gemini,
 }
 

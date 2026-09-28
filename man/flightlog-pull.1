@@ -1,0 +1,21 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH flightlog-pull 1 2026-09-28 "flightlog 0.2.1" "flightlog manual"
+.SH NAME
+flightlog\-pull \- Download a bundle from a URL and validate it
+.SH SYNOPSIS
+\fBflightlog pull\fR [\fB\-o\fR|\fB\-\-output\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIURL\fR> 
+.SH DESCRIPTION
+Download a bundle from a URL and validate it
+.SH OPTIONS
+.TP
+\fB\-o\fR, \fB\-\-output\fR \fI<FILE>\fR [default: session.flightlog.zip]
+Where to save it
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIURL\fR>
+Download URL, e.g. a signed link
+.SH SEE ALSO
+.BR flightlog (1)
