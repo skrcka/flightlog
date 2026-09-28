@@ -36,9 +36,9 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 say "downloading $asset ($VERSION)"
 curl -fsSL "$base/$asset" -o "$tmp/$asset" || die "download failed: $base/$asset"
-curl -fsSL "$base/$asset.sha256" -o "$tmp/$asset.sha256" || die "checksum download failed"
+curl -fsSL "$base/flightlog-$target.sha256" -o "$tmp/sha256" || die "checksum download failed"
 
-expected=$(cut -d' ' -f1 < "$tmp/$asset.sha256")
+expected=$(cut -d' ' -f1 < "$tmp/sha256")
 if command -v sha256sum >/dev/null 2>&1; then
   actual=$(sha256sum "$tmp/$asset" | cut -d' ' -f1)
 else
