@@ -31,6 +31,11 @@
   .install button { border: 0; border-left: 1px solid var(--line); background: var(--accent);
     color: var(--accent-fg); font-weight: 600; padding: 0 18px; cursor: pointer; font-size: 14px; }
   .install button:focus-visible { outline: 2px solid var(--fg); outline-offset: -4px; }
+  .os { display: flex; gap: 4px; margin: 0 0 8px; }
+  .os button { border: 1px solid var(--line); background: transparent; color: var(--muted);
+    border-radius: 999px; padding: 3px 12px; font-size: 13px; cursor: pointer; }
+  .os button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .os button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .alt { color: var(--muted); font-size: 14px; margin: 10px 0 48px; }
   .alt a { color: inherit; }
   pre { background: var(--code); border-radius: 10px; padding: 16px; overflow-x: auto;
@@ -53,11 +58,15 @@
     Hand it to a colleague or another agent, attach it to a ticket, and resume it
     later in Claude Code, Codex or opencode.</p>
 
+  <div class="os" role="group" aria-label="Operating system">
+    <button type="button" data-os="unix" aria-pressed="true">macOS / Linux</button>
+    <button type="button" data-os="windows" aria-pressed="false">Windows</button>
+  </div>
   <div class="install">
     <code id="cmd">curl -fsSL https://flightlog.sh/install.sh | sh</code>
     <button id="copy" type="button" aria-label="Copy install command">Copy</button>
   </div>
-  <p class="alt">macOS and Linux, x86-64 and arm64. Or <code class="i">cargo install flightlog</code> ·
+  <p class="alt">macOS, Linux and Windows, x86-64 and arm64. Or <code class="i">cargo install flightlog</code> ·
     <a href="https://github.com/skrcka/flightlog">GitHub</a> · <a href="https://github.com/skrcka/flightlog/blob/main/SPEC.md">format spec</a></p>
 
 <pre><span class="c"># the newest session in this directory → one file</span>
@@ -89,6 +98,17 @@ flightlog restore df9d8089….flightlog.zip
   <footer>MIT OR Apache-2.0 · <a href="https://github.com/skrcka/flightlog">github.com/skrcka/flightlog</a></footer>
 </main>
 <script>
+  const cmds = {
+    unix: 'curl -fsSL https://flightlog.sh/install.sh | sh',
+    windows: 'irm https://flightlog.sh/install.ps1 | iex',
+  };
+  const osButtons = document.querySelectorAll('.os button');
+  function pick(os) {
+    document.getElementById('cmd').textContent = cmds[os];
+    osButtons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.os === os)));
+  }
+  osButtons.forEach(b => b.addEventListener('click', () => pick(b.dataset.os)));
+  if (/Windows/i.test(navigator.userAgent)) pick('windows');
   const btn = document.getElementById('copy');
   btn.addEventListener('click', async () => {
     const text = document.getElementById('cmd').textContent;

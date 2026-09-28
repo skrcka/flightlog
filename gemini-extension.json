@@ -1,0 +1,5 @@
+{
+  "name": "flightlog",
+  "version": "0.2.0",
+  "description": "Export the current coding-agent session as a portable, redacted bundle, and import or resume one."
+}

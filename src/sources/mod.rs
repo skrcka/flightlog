@@ -95,6 +95,30 @@ pub fn cwd_slug(path: &str) -> String {
         .collect()
 }
 
+/// A path as the agents record it: no Windows `\\?\` verbatim prefix.
+pub fn plain_path(p: &str) -> String {
+    match p.strip_prefix(r"\\?\") {
+        Some(rest) if rest.starts_with("UNC\\") => format!(r"\\{}", &rest[4..]),
+        Some(rest) => rest.to_string(),
+        None => p.to_string(),
+    }
+}
+
+/// Whether two working directories are the same folder: separators, a
+/// trailing slash and (on Windows and macOS) letter case don't matter.
+pub fn same_dir(a: &str, b: &str) -> bool {
+    fn key(p: &str) -> String {
+        let p = plain_path(p).replace('\\', "/");
+        let p = p.trim_end_matches('/');
+        if cfg!(any(windows, target_os = "macos")) {
+            p.to_lowercase()
+        } else {
+            p.to_string()
+        }
+    }
+    key(a) == key(b)
+}
+
 pub fn home() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
 }
@@ -183,4 +207,19 @@ pub fn walk(dir: &Path) -> Vec<PathBuf> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn windows_paths_compare_as_agents_record_them() {
+        assert_eq!(plain_path(r"\\?\C:\Users\me\proj"), r"C:\Users\me\proj");
+        assert_eq!(plain_path(r"\\?\UNC\srv\share\p"), r"\\srv\share\p");
+        assert_eq!(plain_path("/home/me/p"), "/home/me/p");
+        assert!(same_dir(r"\\?\C:\work\proj", r"C:\work\proj\"));
+        assert!(same_dir(r"C:\work\proj", "C:/work/proj"));
+        assert_eq!(cwd_slug(r"C:\Users\me\proj"), "C--Users-me-proj");
+    }
 }

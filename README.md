@@ -5,7 +5,11 @@ portable, redacted bundle, and bring it back: read it anywhere, or resume it in
 the tool it came from.
 
 ```sh
-curl -fsSL https://flightlog.sh/install.sh | sh
+curl -fsSL https://flightlog.sh/install.sh | sh     # macOS, Linux
+```
+
+```powershell
+irm https://flightlog.sh/install.ps1 | iex          # Windows
 ```
 
 [flightlog.sh](https://flightlog.sh)
@@ -66,6 +70,8 @@ flightlog export --summary summary.json --reviewed
 
 ### Where sessions are read from
 
+`~` is `%USERPROFILE%` on Windows.
+
 | Tool | Location |
 |---|---|
 | Claude Code | `~/.claude/projects/<cwd with non-alphanumerics as ->/<session>.jsonl` (+ `<session>/` subagents) |
@@ -85,10 +91,36 @@ flightlog pull PROJ-42 && flightlog restore <file>
 Any other tracker can accept bundles the same way: hand out a presigned upload
 URL and use `flightlog push --url`.
 
+## Teach your agent
+
+flightlog ships two skills, `flightlog-export` and `flightlog-import`, that
+tell an agent how to save the current session and how to pick one up again.
+
+```sh
+flightlog skills install            # every agent found on this machine
+```
+
+Or add this repository as a plugin marketplace:
+
+| Agent | Command |
+|---|---|
+| Claude Code | `claude plugin marketplace add skrcka/flightlog` then `claude plugin install flightlog@flightlog` |
+| Codex | `codex plugin marketplace add skrcka/flightlog` |
+| Copilot CLI | `copilot plugin marketplace add skrcka/flightlog` |
+| Gemini CLI | `gemini extensions install https://github.com/skrcka/flightlog` |
+| Cursor | Settings → Plugins → add marketplace `https://github.com/skrcka/flightlog` |
+
+opencode, Cursor and Gemini CLI also read `~/.agents/skills`, where
+`flightlog skills install` always puts a copy.
+
 ## Install
 
-- **Script** (macOS, Linux; x86-64, arm64): see the top (mirror: `https://raw.githubusercontent.com/skrcka/flightlog/main/install.sh`). `FLIGHTLOG_VERSION`
-  pins a version, `FLIGHTLOG_INSTALL_DIR` changes the target (`~/.local/bin`).
+- **Script**, x86-64 and arm64: `install.sh` for macOS and Linux, `install.ps1`
+  for Windows (see the top). `FLIGHTLOG_VERSION` pins a version,
+  `FLIGHTLOG_INSTALL_DIR` changes the target (`~/.local/bin`, on Windows
+  `%LOCALAPPDATA%\flightlog\bin`, which the script adds to the user `PATH`).
+- **Release archives:** [GitHub releases](https://github.com/skrcka/flightlog/releases),
+  each with a `.sha256`.
 - **Cargo:** `cargo install flightlog`
 - **From source:** `cargo build --release`
 

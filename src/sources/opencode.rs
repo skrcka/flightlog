@@ -10,8 +10,30 @@ use serde_json::{json, Value};
 use super::{Converted, Meta, NativeFile, SessionRef, Tool};
 use crate::atif::{Builder, Usage};
 
+/// The opencode command: npm installs it as `opencode.cmd` on Windows,
+/// which `Command` does not find under the bare name.
+fn opencode() -> Command {
+    static PROGRAM: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
+    let program = PROGRAM.get_or_init(|| {
+        let works = |p: &str| {
+            Command::new(p)
+                .arg("--version")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .is_ok_and(|s| s.success())
+        };
+        if cfg!(windows) && !works("opencode") && works("opencode.cmd") {
+            "opencode.cmd"
+        } else {
+            "opencode"
+        }
+    });
+    Command::new(program)
+}
+
 fn available() -> bool {
-    Command::new("opencode")
+    opencode()
         .arg("--version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -23,7 +45,7 @@ pub fn list(cwd: &str) -> Result<Vec<SessionRef>> {
     if !available() {
         return Ok(Vec::new());
     }
-    let out = Command::new("opencode")
+    let out = opencode()
         .args(["session", "list", "--format", "json"])
         .current_dir(cwd)
         .stderr(Stdio::null())
@@ -53,7 +75,7 @@ pub fn list(cwd: &str) -> Result<Vec<SessionRef>> {
 /// pipe (observed at ~60 KB).
 pub fn export(id: &str) -> Result<String> {
     let mut tmp = tempfile_in_temp()?;
-    let status = Command::new("opencode")
+    let status = opencode()
         .args(["export", id])
         .stdout(tmp.try_clone()?)
         .stderr(Stdio::null())

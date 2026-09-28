@@ -5,6 +5,7 @@ mod atif;
 mod bundle;
 mod redact;
 mod restore;
+mod skills;
 mod sources;
 mod targets;
 
@@ -93,6 +94,11 @@ enum Cmd {
         #[arg(long)]
         inside_url: Option<String>,
     },
+    /// Teach your agents to use flightlog: install its skills.
+    Skills {
+        #[command(subcommand)]
+        cmd: SkillsCmd,
+    },
     /// Put a bundle's native session back so its tool can resume it.
     Restore {
         file: PathBuf,
@@ -105,15 +111,31 @@ enum Cmd {
     },
 }
 
+#[derive(Subcommand)]
+enum SkillsCmd {
+    /// Install the flightlog-export and flightlog-import skills into
+    /// ~/.agents/skills and each agent's skill folder (default: every agent
+    /// found on this machine).
+    Install {
+        /// Only these agents.
+        #[arg(long, value_enum, value_delimiter = ',')]
+        agent: Vec<skills::Agent>,
+        /// Install into this directory instead.
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
+    /// Print a skill's SKILL.md (default: flightlog-export).
+    Show { name: Option<String> },
+}
+
 fn cwd_of(p: Option<PathBuf>) -> Result<String> {
     let p = match p {
         Some(p) => p,
         None => std::env::current_dir()?,
     };
-    Ok(std::fs::canonicalize(&p)
-        .unwrap_or(p)
-        .to_string_lossy()
-        .into_owned())
+    Ok(sources::plain_path(
+        &std::fs::canonicalize(&p).unwrap_or(p).to_string_lossy(),
+    ))
 }
 
 fn default_summary(c: &sources::Converted) -> Value {
@@ -393,6 +415,34 @@ fn run() -> Result<()> {
             });
             std::fs::write(&out, &bytes)?;
             println!("downloaded {id} to {}", out.display());
+        }
+        Cmd::Skills {
+            cmd: SkillsCmd::Install { agent, dir },
+        } => {
+            let dirs = match dir {
+                Some(d) => vec![d],
+                None => skills::targets(&agent),
+            };
+            for d in &dirs {
+                skills::install_into(d)?;
+                println!(
+                    "installed flightlog-export, flightlog-import in {}",
+                    d.display()
+                );
+            }
+            println!("restart your agent so it loads the skills");
+        }
+        Cmd::Skills {
+            cmd: SkillsCmd::Show { name },
+        } => {
+            let name = name.unwrap_or_else(|| "flightlog-export".into());
+            let (_, body) = skills::SKILLS
+                .iter()
+                .find(|(n, _)| *n == name)
+                .with_context(|| {
+                    format!("no skill {name}; there are flightlog-export and flightlog-import")
+                })?;
+            print!("{body}");
         }
         Cmd::Restore { file, cwd, force } => {
             let b = bundle::read(&file)?;

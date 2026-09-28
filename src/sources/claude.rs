@@ -34,8 +34,26 @@ fn session_ref(path: PathBuf) -> SessionRef {
     }
 }
 
+/// The project folder for `cwd`; Windows drive letters may differ in case.
+fn project_dir(cwd: &str) -> PathBuf {
+    let slug = cwd_slug(cwd);
+    let exact = projects_dir().join(&slug);
+    if exact.is_dir() {
+        return exact;
+    }
+    std::fs::read_dir(projects_dir())
+        .ok()
+        .and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| {
+                p.file_name()
+                    .is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case(&slug))
+            })
+        })
+        .unwrap_or(exact)
+}
+
 pub fn list(cwd: &str) -> Result<Vec<SessionRef>> {
-    let dir = projects_dir().join(cwd_slug(cwd));
+    let dir = project_dir(cwd);
     let mut v: Vec<SessionRef> = std::fs::read_dir(&dir)
         .map(|rd| {
             rd.flatten()

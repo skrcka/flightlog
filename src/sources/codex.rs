@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 
-use super::{home, modified, walk, Converted, Meta, NativeFile, SessionRef, Tool};
+use super::{home, modified, same_dir, walk, Converted, Meta, NativeFile, SessionRef, Tool};
 use crate::atif::{Builder, Usage};
 
 pub fn codex_home() -> PathBuf {
@@ -60,7 +60,10 @@ pub fn list(cwd: &str) -> Result<Vec<SessionRef>> {
         .into_iter()
         .filter_map(|p| {
             let m = first_meta(&p)?;
-            (m["cwd"] == cwd).then(|| session_ref(p, &m))
+            m["cwd"]
+                .as_str()
+                .is_some_and(|c| same_dir(c, cwd))
+                .then(|| session_ref(p, &m))
         })
         .collect())
 }
