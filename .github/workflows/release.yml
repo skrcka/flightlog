@@ -22,12 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: taiki-e/create-gh-release-action@eba8ea96c86cca8a37f1b56e94b4d13301fba651
         with:
           changelog: CHANGELOG.md
           draft: true
-          branch: '^main$'
+          branch: 'main'
           token: ${{ secrets.GITHUB_TOKEN }}
   upload-assets:
     needs: create-release
