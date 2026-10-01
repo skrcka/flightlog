@@ -1,7 +1,7 @@
 {
   "name": "flightlog",
   "displayName": "flightlog",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Export the current coding-agent session as a portable, redacted bundle, and import or resume one.",
   "author": {
     "name": "flightlog authors"

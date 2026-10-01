@@ -299,7 +299,7 @@ fn reject_opaque(v: &Value) -> anyhow::Result<()> {
                 if matches!(k.as_str(), "encrypted_content" | "inlineData" | "image_url")
                     && !x.is_null()
                 {
-                    anyhow::bail!("encoded native content cannot be redacted; use --no-native");
+                    anyhow::bail!("encoded native content cannot be redacted (field {k}); use --no-native, then restore with --to TOOL for shared-history conversion");
                 }
                 reject_opaque(x)?;
             }
@@ -310,7 +310,7 @@ fn reject_opaque(v: &Value) -> anyhow::Result<()> {
             }
         }
         Value::String(s) if s.starts_with("data:") => {
-            anyhow::bail!("encoded native content cannot be redacted; use --no-native")
+            anyhow::bail!("encoded native content cannot be redacted (data URI); use --no-native, then restore with --to TOOL for shared-history conversion")
         }
         _ => {}
     }

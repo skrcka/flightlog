@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0] - 2026-09-30
+
+- Add destination encoders for Claude, Codex, opencode, Gemini, Cursor CLI,
+  Copilot CLI and VS Code Chat via `restore --to TOOL`, using the shared ATIF
+  conversation, including Claude Code exports and bundles made with `--no-native`.
+  Preserve messages and shared record details as historical context; do not replay
+  tool calls or install source permissions, configuration, or native files.
+- Add Copilot CLI and VS Code chat export, including `export --input FILE`,
+  VS Code JSONL mutation logs, and Copilot session rewinds. Native runtime
+  verification remains in progress; see README compatibility status.
+- Filter automatic opencode session selection by working directory; explicit
+  `--session` selection remains available across directories.
+- Explain the `--no-native` / `restore --to TOOL` path in export errors, help,
+  and inspection output, while retaining the encoded-content redaction guard.
+- Validate conversion inputs and bound generated session size. Existing native
+  restore and unredacted-bundle opt-in remain unchanged.
+
 ## [0.2.2] - 2026-09-29
 
 - Add `export --no-redact` for private migration and `--allow-unredacted` on input.

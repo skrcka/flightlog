@@ -51,6 +51,8 @@ impl Fixture {
             .env("CLAUDE_CONFIG_DIR", self.root.join("claude"))
             .env("CURSOR_CONFIG_DIR", self.root.join("cursor"))
             .env("GEMINI_CLI_HOME", self.root.join("gemini"))
+            .env("COPILOT_VSCODE_USER_DATA_DIR", self.root.join("vscode"))
+            .env("COPILOT_HOME", self.root.join("copilot"))
             .env_remove("FLIGHTLOG_REDACT_FILE");
         c
     }
@@ -233,6 +235,389 @@ fn make_claude(f: &Fixture) -> PathBuf {
     )
     .unwrap();
     folder
+}
+
+#[test]
+fn claude_shared_history_restores_to_fresh_codex_sessions() {
+    let f = Fixture::new();
+    make_claude(&f);
+    let output = f.run(&[
+        "export",
+        "--tool",
+        "claude",
+        "--no-native",
+        "-o",
+        "shared.zip",
+    ]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    for _ in 0..2 {
+        let output = f.run(&["restore", "shared.zip", "--to", "codex"]);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("codex resume "));
+    }
+    let output = f.run(&["list", "--tool", "codex"]);
+    assert!(output.status.success());
+    fn collect(p: &std::path::Path, files: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(p).unwrap() {
+            let p = entry.unwrap().path();
+            if p.is_dir() {
+                collect(&p, files);
+            } else {
+                files.push(p);
+            }
+        }
+    }
+    let mut files = vec![];
+    collect(&f.root.join("codex/sessions"), &mut files);
+    assert_eq!(files.len(), 2);
+    let mut ids = vec![];
+    for file in files {
+        let text = fs::read_to_string(file).unwrap();
+        let rows: Vec<Value> = text
+            .lines()
+            .map(|s| serde_json::from_str(s).unwrap())
+            .collect();
+        let id = rows[0]["payload"]["id"].as_str().unwrap();
+        uuid::Uuid::parse_str(id).unwrap();
+        ids.push(id.to_owned());
+        assert!(String::from_utf8_lossy(&output.stdout).contains(id));
+        assert!(!text.contains("sensitive-value"));
+        assert!(text.contains("tool_calls"));
+        for row in rows.iter().filter(|r| r["type"] == "response_item") {
+            assert_eq!(row["payload"]["type"], "message");
+            assert!(matches!(
+                row["payload"]["role"].as_str(),
+                Some("user" | "assistant")
+            ));
+        }
+    }
+    assert_ne!(ids[0], ids[1]);
+}
+
+#[test]
+fn vscode_export_and_cross_import_preserve_messages_and_historical_tools() {
+    use std::io::Read;
+    let f = Fixture::new();
+    let chat = json!({"responderUsername":"Copilot","sessionId":"vscode-test","requests":[
+        {"message":{"text":"Explain the change","parts":[]},"variableData":{"variables":[]},"response":[{"value":"Here is the explanation","isTrusted":true}]},
+        {"message":"Run the check","response":[{"kind":"toolInvocationSerialized","toolId":"terminal","invocationMessage":"check","isComplete":true}]}
+    ]});
+    fs::write(f.root.join("chat.json"), serde_json::to_vec(&chat).unwrap()).unwrap();
+    let out = f.run(&[
+        "export",
+        "--tool",
+        "copilot-vscode",
+        "--input",
+        "chat.json",
+        "-o",
+        "chat.zip",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let mut zip = zip::ZipArchive::new(fs::File::open(f.root.join("chat.zip")).unwrap()).unwrap();
+    let mut trajectory = String::new();
+    zip.by_name("trajectory.json")
+        .unwrap()
+        .read_to_string(&mut trajectory)
+        .unwrap();
+    let trajectory: Value = serde_json::from_str(&trajectory).unwrap();
+    assert_eq!(trajectory["steps"].as_array().unwrap().len(), 4);
+    assert_eq!(
+        trajectory["steps"][3]["extra"]["vscode_response"][0]["toolId"],
+        "terminal"
+    );
+    for destination in [
+        "codex",
+        "claude",
+        "gemini",
+        "cursor",
+        "opencode",
+        "copilot-vscode",
+        "copilot",
+    ] {
+        let out = f.run(&["restore", "chat.zip", "--to", destination]);
+        assert!(
+            out.status.success(),
+            "{destination}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    let native = f.run(&["restore", "chat.zip"]);
+    assert!(
+        native.status.success(),
+        "{}",
+        String::from_utf8_lossy(&native.stderr)
+    );
+    assert!(String::from_utf8_lossy(&native.stdout).contains("Chat: Import Chat"));
+    let export = fs::read_dir(f.root.join(".flightlog/imports"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| p.to_string_lossy().ends_with(".copilot-vscode.json"))
+        .unwrap();
+    let v: Value = serde_json::from_slice(&fs::read(&export).unwrap()).unwrap();
+    assert_eq!(v["responderUsername"], "GitHub Copilot");
+    for request in v["requests"].as_array().unwrap() {
+        for response in request["response"].as_array().unwrap() {
+            assert_eq!(response["isTrusted"], false);
+            assert!(
+                response.get("kind").is_none(),
+                "historical tools must be text"
+            );
+        }
+    }
+    let out = f.run(&[
+        "export",
+        "--tool",
+        "copilot-vscode",
+        "--input",
+        export.to_str().unwrap(),
+        "--no-native",
+        "-o",
+        "roundtrip.zip",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_failed(f.run(&["export", "--input", "chat.json"]));
+    assert_failed(f.run(&[
+        "export",
+        "--tool",
+        "copilot-vscode",
+        "--session",
+        "s",
+        "--input",
+        "chat.json",
+    ]));
+}
+
+#[test]
+fn copilot_cli_history_converts_and_each_cli_destination_can_be_exported() {
+    use std::io::Read;
+    let f = Fixture::new();
+    let rows = [
+        json!({"type":"session.start","data":{"sessionId":"copilot-source","version":1,"context":{"cwd":f.root.to_str().unwrap()}}}),
+        json!({"type":"user.message","data":{"content":"Find the cobalt bug"}}),
+        json!({"type":"assistant.message","data":{"messageId":"m","content":"Checking cobalt","toolRequests":[{"toolCallId":"call","name":"read_file","arguments":{"path":"source.rs"}}]}}),
+        json!({"type":"tool.execution_start","data":{"toolCallId":"call","toolName":"read_file","arguments":{"path":"source.rs"}}}),
+        json!({"type":"tool.execution_complete","data":{"toolCallId":"call","success":true,"result":{"content":"cobalt output"}}}),
+        json!({"type":"assistant.message","data":{"messageId":"m2","content":"Cobalt fixed"}}),
+    ];
+    fs::write(
+        f.root.join("events.jsonl"),
+        rows.iter()
+            .map(Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+    .unwrap();
+    let out = f.run(&[
+        "export",
+        "--tool",
+        "copilot",
+        "--input",
+        "events.jsonl",
+        "-o",
+        "copilot.zip",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let mut zip =
+        zip::ZipArchive::new(fs::File::open(f.root.join("copilot.zip")).unwrap()).unwrap();
+    let v: Value = serde_json::from_reader(zip.by_name("trajectory.json").unwrap()).unwrap();
+    let tool_step = &v["steps"][2];
+    assert_eq!(tool_step["tool_calls"].as_array().unwrap().len(), 1);
+    assert!(tool_step["observation"]["results"][0]["content"]
+        .as_str()
+        .unwrap()
+        .contains("cobalt output"));
+    for destination in ["codex", "claude", "gemini", "cursor", "copilot"] {
+        let out = f.run(&["restore", "copilot.zip", "--to", destination]);
+        assert!(
+            out.status.success(),
+            "{destination}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let output = format!("{destination}-roundtrip.zip");
+        let out = f.run(&[
+            "export",
+            "--tool",
+            destination,
+            "--no-native",
+            "-o",
+            &output,
+        ]);
+        assert!(
+            out.status.success(),
+            "{destination}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let mut zip = zip::ZipArchive::new(fs::File::open(f.root.join(output)).unwrap()).unwrap();
+        let mut trajectory = String::new();
+        zip.by_name("trajectory.json")
+            .unwrap()
+            .read_to_string(&mut trajectory)
+            .unwrap();
+        for text in [
+            "Find the cobalt bug",
+            "Checking cobalt",
+            "cobalt output",
+            "Cobalt fixed",
+        ] {
+            assert!(trajectory.contains(text), "{destination} lost {text}");
+        }
+    }
+    let out = f.run(&["restore", "copilot.zip"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(f
+        .root
+        .join("copilot/session-state/copilot-source/events.jsonl")
+        .exists());
+    assert_failed(f.run(&["restore", "copilot.zip"]));
+}
+
+#[test]
+fn copilot_discovery_matches_workspace_and_rejects_broken_explicit_inputs() {
+    let f = Fixture::new();
+    let workspace = f.root.join("vscode/User/workspaceStorage/workspace");
+    fs::create_dir_all(workspace.join("chatSessions")).unwrap();
+    let cwd = f.root.to_str().unwrap().replace('\\', "/");
+    let folder = if cfg!(windows) {
+        format!("file:///{cwd}")
+    } else {
+        format!("file://{cwd}")
+    };
+    fs::write(
+        workspace.join("workspace.json"),
+        json!({"folder":folder}).to_string(),
+    )
+    .unwrap();
+    let chat = json!({"kind":0,"v":{"responderUsername":"Copilot","sessionId":"discovered-vscode","requests":[{"message":"workspace question","response":[{"value":"workspace answer"}]}]}});
+    fs::write(workspace.join("chatSessions/chat.jsonl"), chat.to_string()).unwrap();
+    let out = f.run(&["list", "--tool", "copilot-vscode"]);
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("discovered-vscode"));
+    let out = f.run(&[
+        "export",
+        "--tool",
+        "copilot-vscode",
+        "--session",
+        "discovered-vscode",
+        "-o",
+        "discovered.zip",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let cli = f.root.join("copilot/session-state/discovered-cli");
+    fs::create_dir_all(&cli).unwrap();
+    fs::write(cli.join("events.jsonl"), [
+        json!({"type":"session.start","data":{"sessionId":"discovered-cli","context":{"cwd":f.root.to_str().unwrap()}}}).to_string(),
+        json!({"type":"user.message","data":{"content":"cli question"}}).to_string()
+    ].join("\n")).unwrap();
+    let out = f.run(&["list", "--tool", "copilot"]);
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("discovered-cli"));
+    let out = f.run(&[
+        "export",
+        "--tool",
+        "copilot",
+        "--session",
+        "discovered-cli",
+        "-o",
+        "cli.zip",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    fs::write(f.root.join("broken.jsonl"), "{invalid").unwrap();
+    for tool in ["copilot", "copilot-vscode"] {
+        assert_failed(f.run(&[
+            "export",
+            "--tool",
+            tool,
+            "--input",
+            "broken.jsonl",
+            "-o",
+            "broken.zip",
+        ]));
+        assert!(!f.root.join("broken.zip").exists());
+    }
+}
+
+#[test]
+fn cross_tool_restore_keeps_unredacted_opt_in() {
+    let f = Fixture::new();
+    make_claude(&f);
+    assert!(f
+        .run(&[
+            "export",
+            "--tool",
+            "claude",
+            "--no-native",
+            "--no-redact",
+            "-o",
+            "shared.zip"
+        ])
+        .status
+        .success());
+    assert_failed(f.run(&["restore", "shared.zip", "--to", "codex"]));
+    assert!(!f.root.join("codex").exists());
+    let result = f.run(&[
+        "restore",
+        "shared.zip",
+        "--to",
+        "codex",
+        "--allow-unredacted",
+    ]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[test]
+fn cross_tool_restore_rejects_empty_or_malformed_history_before_writing() {
+    let f = Fixture::new();
+    for steps in [
+        json!([]),
+        json!([{"source":"developer", "message":"bad"}]),
+        json!([{"source":"user", "message":[]}]),
+    ] {
+        let trajectory = serde_json::to_vec(
+            &json!({"schema_version":"ATIF-v1.8","session_id":"s","steps":steps}),
+        )
+        .unwrap();
+        let m = json!({"format":"flightlog","format_version":"1.0","bundle_id":"00000000-0000-4000-8000-000000000001","created_at":"2026-09-29T00:00:00Z","source":{"tool":"claude_code","session_id":"s"},"summary":{"goal":"g","state":"s"},"redaction":{"findings":[]},"files":[{"path":"trajectory.json","bytes":trajectory.len(),"sha256":format!("{:x}",Sha256::digest(&trajectory))}]});
+        f.pack(m, vec![("trajectory.json", trajectory)]);
+        assert_failed(f.run(&["restore", "test.zip", "--to", "codex"]));
+        assert!(!f.root.join("codex").exists());
+    }
 }
 #[test]
 fn export_redacts_native_metadata_and_custom_names_before_writing() {

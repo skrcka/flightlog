@@ -1,9 +1,9 @@
 # flightlog
 
 Record a coding-agent session — **Claude Code, Codex, opencode, Gemini CLI,
-Cursor** — as a
+Cursor, GitHub Copilot CLI and Copilot in VS Code** — as a
 portable, redacted bundle, and bring it back: read it anywhere, or resume it in
-the tool it came from.
+the tool it came from, or convert its shared history into a fresh destination session.
 
 ```sh
 curl -fsSL https://flightlog.sh/install.sh | sh     # macOS, Linux
@@ -49,11 +49,11 @@ agent, and later resume:
 | Command | What it does |
 |---|---|
 | `flightlog list` | Sessions recorded for this directory, newest first |
-| `flightlog export [--tool claude\|codex\|opencode\|gemini\|cursor] [--session ID]` | Build a bundle; `--summary summary.json` or `--goal/--state` add the summary, `--no-native` leaves out the resumable files |
+| `flightlog export [--tool TOOL] [--session ID] [--input FILE]` | Build a bundle; `--summary summary.json` or `--goal/--state` add the summary, `--no-native` leaves out the resumable files |
 | `flightlog inspect FILE` | Summary, source, stats, redaction report |
 | `flightlog validate FILE` | Check against the spec (exit 1 with every problem) |
 | `flightlog extract FILE [-o DIR]` | Unpack; the conversation is `trajectory.json` |
-| `flightlog restore FILE` | Put the native session back and print the resume command (never overwrites without `--force`) |
+| `flightlog restore FILE [--to TOOL] [--cwd DIR]` | Restore the original native session, or convert shared history to a destination |
 | `flightlog push FILE --url URL` | Upload to any presigned PUT URL |
 | `flightlog push FILE --url URL` / `flightlog pull URL` | Upload to a presigned URL / download and validate a bundle |
 
@@ -187,16 +187,89 @@ native content fails closed; `--no-native` exports the conversation alone.
 
 Transfers require HTTPS. Use `--url-file` (or `--url-file -` for stdin) to keep
 signed URLs out of command history. Extraction requires a new output directory;
-restore checks known layouts and refuses overwrites unless `--force` is set.
+native restore checks known layouts and refuses overwrites unless `--force`,
+`--overwrite` or `--yolo` is set. Cross-tool conversion creates a new session ID.
 Treat imported conversations as untrusted data. See [SECURITY.md](SECURITY.md).
+
+### Continue in another tool
+
+```sh
+flightlog restore session.flightlog.zip --to codex --cwd /path/to/project
+```
+
+This creates a new Codex session from `trajectory.json` and prints `codex resume
+<new-id>`. It works with Claude Code and other supported source tools, including
+bundles exported with `--no-native`. For an unredacted bundle, also pass
+`--allow-unredacted`.
+
+User and assistant messages retain their roles. Source system records become
+ordinary historical context. Tool calls/results, recorded reasoning, timestamps,
+and other step fields are retained as labeled JSON text, not live tool events.
+Only content already present in the shared trajectory transfers: omitted or
+truncated content cannot be recovered, and attachments/native files are not
+installed. Models, permissions, tool configuration, and filesystem contents are
+not migrated. Internal paths in message text are not rewritten by `--cwd`.
+Codex may compact large histories when continuing them.
+
+Destination values: `claude`, `codex`, `opencode`, `gemini`, `cursor` (Cursor CLI),
+`copilot` (Copilot CLI), and `copilot-vscode` (VS Code Chat). Any supported source
+can feed each destination through the shared trajectory. Without `--to`, restore
+uses the original tool's native files.
+
+For VS Code, restore writes an import JSON file and prints its path. In the editor,
+run **Chat: Import Chat** from the Command Palette and select that file. This
+covers the VS Code chat format used by Copilot and extensions using that chat
+system; extensions with their own chat storage need their own adapters.
+For opencode, run the printed `opencode import` command, then select a configured
+model before continuing. Source model settings do not transfer.
+
+### Copilot export
+
+```sh
+flightlog export --tool copilot
+flightlog export --tool copilot-vscode
+# A file exported from VS Code, or a saved chat JSON/JSONL:
+flightlog export --tool copilot-vscode --input chat.json
+# A Copilot CLI event log:
+flightlog export --tool copilot --input events.jsonl
+flightlog restore session.flightlog.zip --to copilot-vscode
+```
+
+Copilot CLI uses `COPILOT_HOME` (default `~/.copilot`). VS Code discovery searches
+Code, Code Insiders, and VSCodium user data for chats associated with the current
+workspace. Set `COPILOT_VSCODE_USER_DATA_DIR` to another editor's user-data root
+(the directory containing `User`) or use `--input` for an explicit export. Chats
+without a matching workspace can still be exported with `--session` or `--input`.
+
+### Compatibility verification
+
+The destination encoders are under development for 0.3.0. Automated tests cover
+conversion, reader round trips, redaction, and unsafe inputs. Native smoke checks
+have passed with Claude Code 2.1.285 (resume/display), Codex 0.158.0
+(read/resume), and opencode 1.18.20 (import/export,
+including message order), without submitting a model turn:
+
+```sh
+python3 scripts/test-claude-import.py target/debug/flightlog
+python3 scripts/test-codex-import.py target/debug/flightlog
+python3 scripts/test-opencode-import.py target/debug/flightlog
+```
+
+Gemini, Cursor CLI, and Copilot CLI still need native runtime verification;
+VS Code import needs an editor integration check. A native test harness is ready:
+`python3 scripts/test-vscode-import.py target/debug/flightlog [code-executable]`.
+It requires an installed VS Code editor and a desktop, uses a temporary profile,
+and imports/re-exports history without signing in or submitting a model turn.
+The Claude UI smoke script requires a POSIX host. Cursor editor export exists,
+but native Cursor editor import is still outstanding. These gaps must be closed
+before claiming full provider compatibility.
 
 ## Status
 
 Early. Converters track formats the tools change without notice; please open
 an issue with the tool version when an export looks wrong. Gemini CLI and
 Cursor support is new and built from their documented storage; reports from
-real sessions are especially welcome. Planned: cross-tool resume, more
-redaction rules.
+real sessions are especially welcome. See the compatibility verification status above.
 
 ## License
 

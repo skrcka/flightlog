@@ -80,7 +80,18 @@ flightlog inspect df9d8089….flightlog.zip
 
 <span class="c"># back on any machine with the same repo checked out</span>
 flightlog restore df9d8089….flightlog.zip
-<span class="c"># now run: claude --resume df9d8089…</span></pre>
+<span class="c"># now run: claude --resume df9d8089…</span>
+
+<span class="c"># or continue this Claude conversation in Codex (v0.3.0+)</span>
+flightlog restore df9d8089….flightlog.zip --to codex
+<span class="c"># now run: codex resume &lt;new-id&gt;</span></pre>
+
+  <p>Cross-tool conversion uses the shared conversation, even without native files.
+    Tool calls become historical text; attachments, permissions and tool configuration
+    are not transferred. Version 0.3.0 development adds destinations for Claude,
+    Codex, opencode, Gemini, Cursor CLI, Copilot CLI and VS Code Chat.
+    <a href="https://github.com/skrcka/flightlog#compatibility-verification">Compatibility verification is still in progress</a>;
+    Cursor editor import remains outstanding.</p>
 
   <h2>What you get</h2>
   <div class="grid">

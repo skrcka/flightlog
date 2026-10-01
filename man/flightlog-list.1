@@ -1,6 +1,6 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH flightlog-list 1 2026-09-29 "flightlog 0.2.2" "flightlog manual"
+.TH flightlog-list 1 2026-09-30 "flightlog 0.3.0" "flightlog manual"
 .SH NAME
 flightlog\-list \- List sessions recorded for a directory, newest first
 .SH SYNOPSIS
@@ -29,6 +29,10 @@ opencode: opencode
 gemini: Gemini CLI
 .IP \(bu 2
 cursor: Cursor CLI (cursor\-agent) and the Cursor editor
+.IP \(bu 2
+copilot\-vscode: GitHub Copilot chat in VS Code and compatible editors
+.IP \(bu 2
+copilot: GitHub Copilot CLI
 .RE
 .TP
 \fB\-\-cwd\fR \fI<DIR>\fR
@@ -63,5 +67,12 @@ File of private literal names/domains to redact (one per line; kept local)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+.B COPILOT_HOME
+Copilot CLI configuration and state directory (default ~/.copilot).
+.TP
+.B COPILOT_VSCODE_USER_DATA_DIR
+VS Code compatible editor user data root (the directory containing User).
+By default, Code, Code Insiders and VSCodium user data locations are searched.
 .SH SEE ALSO
 .BR flightlog (1)

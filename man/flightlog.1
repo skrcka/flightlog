@@ -1,6 +1,6 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH flightlog 1 2026-09-29 "flightlog 0.2.2" "flightlog manual"
+.TH flightlog 1 2026-09-30 "flightlog 0.3.0" "flightlog manual"
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH NAME
@@ -74,7 +74,7 @@ flightlog\-extract(1)
 Unpack a bundle into a directory (the conversation is trajectory.json)
 .TP
 flightlog\-restore(1)
-Put a bundle\*(Aqs session back so its tool can resume it
+Restore the original session or convert shared history into another tool
 .TP
 flightlog\-push(1)
 Upload a bundle to a presigned URL (validated first)
@@ -99,6 +99,30 @@ See what a bundle holds, then resume it:
 .nf
 flightlog inspect df9d8089.flightlog.zip
 flightlog restore df9d8089.flightlog.zip
+.fi
+.RE
+.PP
+Continue shared history in another tool (Codex example):
+.PP
+.RS 4
+.nf
+flightlog restore df9d8089.flightlog.zip \-\-to codex \-\-cwd /path/to/project
+.fi
+.RE
+.PP
+Native files are optional for conversion. Historical tool calls become text;
+source permissions, configuration and attachments are not installed.
+.PP
+Destination names: claude, codex, opencode, gemini, cursor (CLI), copilot (CLI),
+and copilot\-vscode. The VS Code destination writes a JSON file to select with
+Chat: Import Chat in the Command Palette. opencode writes an import file;
+choose a configured model before continuing. Cursor editor import is outstanding.
+.PP
+Export a manually exported VS Code chat:
+.PP
+.RS 4
+.nf
+flightlog export \-\-tool copilot\-vscode \-\-input chat.json
 .fi
 .RE
 .PP
@@ -139,6 +163,12 @@ and are exported read\-only.
 .PP
 opencode sessions are read through
 .BR "opencode export" .
+.TP
+.I ~/.copilot/session\-state/<id>/events.jsonl
+Copilot CLI.
+.TP
+.I <VS Code user data>/User/workspaceStorage/<workspace>/chatSessions/
+Copilot in VS Code; JSON exports and JSONL mutation logs are supported.
 .SH ENVIRONMENT
 .TP
 .B CLAUDE_CONFIG_DIR
@@ -152,6 +182,13 @@ The directory holding .gemini (default: home).
 .TP
 .B CURSOR_CONFIG_DIR
 The Cursor CLI's directory (default ~/.cursor).
+.TP
+.B COPILOT_HOME
+Copilot CLI configuration and state directory (default ~/.copilot).
+.TP
+.B COPILOT_VSCODE_USER_DATA_DIR
+VS Code compatible editor user data root (the directory containing User).
+By default, Code, Code Insiders and VSCodium user data locations are searched.
 .SH SEE ALSO
 The bundle format: https://github.com/skrcka/flightlog/blob/main/SPEC.md
 .br
@@ -159,4 +196,4 @@ Home page: https://flightlog.sh
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH VERSION
-v0.2.2
+v0.3.0

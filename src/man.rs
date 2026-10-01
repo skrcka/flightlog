@@ -26,6 +26,30 @@ flightlog restore df9d8089.flightlog.zip
 .fi
 .RE
 .PP
+Continue shared history in another tool (Codex example):
+.PP
+.RS 4
+.nf
+flightlog restore df9d8089.flightlog.zip \-\-to codex \-\-cwd /path/to/project
+.fi
+.RE
+.PP
+Native files are optional for conversion. Historical tool calls become text;
+source permissions, configuration and attachments are not installed.
+.PP
+Destination names: claude, codex, opencode, gemini, cursor (CLI), copilot (CLI),
+and copilot\-vscode. The VS Code destination writes a JSON file to select with
+Chat: Import Chat in the Command Palette. opencode writes an import file;
+choose a configured model before continuing. Cursor editor import is outstanding.
+.PP
+Export a manually exported VS Code chat:
+.PP
+.RS 4
+.nf
+flightlog export \-\-tool copilot\-vscode \-\-input chat.json
+.fi
+.RE
+.PP
 Hand a bundle to a service that gave you upload and download links:
 .PP
 .RS 4
@@ -63,6 +87,12 @@ and are exported read\-only.
 .PP
 opencode sessions are read through
 .BR "opencode export" .
+.TP
+.I ~/.copilot/session\-state/<id>/events.jsonl
+Copilot CLI.
+.TP
+.I <VS Code user data>/User/workspaceStorage/<workspace>/chatSessions/
+Copilot in VS Code; JSON exports and JSONL mutation logs are supported.
 .SH ENVIRONMENT
 .TP
 .B CLAUDE_CONFIG_DIR
@@ -76,6 +106,13 @@ The directory holding .gemini (default: home).
 .TP
 .B CURSOR_CONFIG_DIR
 The Cursor CLI's directory (default ~/.cursor).
+.TP
+.B COPILOT_HOME
+Copilot CLI configuration and state directory (default ~/.copilot).
+.TP
+.B COPILOT_VSCODE_USER_DATA_DIR
+VS Code compatible editor user data root (the directory containing User).
+By default, Code, Code Insiders and VSCodium user data locations are searched.
 .SH SEE ALSO
 The bundle format: https://github.com/skrcka/flightlog/blob/main/SPEC.md
 .br
@@ -134,7 +171,16 @@ pub fn write_all(cli: &Command, dir: &Path) -> Result<Vec<PathBuf>> {
     for (name, c) in subs {
         let mut buf = Vec::new();
         page_for(c).render(&mut buf)?;
-        buf.write_all(b".SH SEE ALSO\n.BR flightlog (1)\n")?;
+        buf.write_all(
+            b".TP
+.B COPILOT_HOME
+Copilot CLI configuration and state directory (default ~/.copilot).
+.TP
+.B COPILOT_VSCODE_USER_DATA_DIR
+VS Code compatible editor user data root (the directory containing User).
+By default, Code, Code Insiders and VSCodium user data locations are searched.
+.SH SEE ALSO\n.BR flightlog (1)\n",
+        )?;
         let f = dir.join(format!("{name}.1"));
         std::fs::write(&f, normalize(&buf)?)?;
         written.push(f);

@@ -1,6 +1,6 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH flightlog-skills 1 2026-09-29 "flightlog 0.2.2" "flightlog manual"
+.TH flightlog-skills 1 2026-09-30 "flightlog 0.3.0" "flightlog manual"
 .SH NAME
 flightlog\-skills \- Install the agent skills that teach agents to export and import sessions
 .SH SYNOPSIS
@@ -50,5 +50,12 @@ Install the skills for every agent found here, or the ones named
 .TP
 flightlog\-skills\-show(1)
 Print a skill\*(Aqs SKILL.md
+.TP
+.B COPILOT_HOME
+Copilot CLI configuration and state directory (default ~/.copilot).
+.TP
+.B COPILOT_VSCODE_USER_DATA_DIR
+VS Code compatible editor user data root (the directory containing User).
+By default, Code, Code Insiders and VSCodium user data locations are searched.
 .SH SEE ALSO
 .BR flightlog (1)

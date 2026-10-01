@@ -41,20 +41,33 @@ fn available() -> bool {
         .is_ok_and(|s| s.success())
 }
 
-pub fn list(cwd: &str) -> Result<Vec<SessionRef>> {
+fn listed(cwd: &str) -> Result<Value> {
     if !available() {
-        return Ok(Vec::new());
+        return Ok(json!([]));
     }
     let out = opencode()
         .args(["session", "list", "--format", "json"])
         .current_dir(cwd)
         .stderr(Stdio::null())
         .output()?;
-    let sessions: Value = serde_json::from_slice(&out.stdout).unwrap_or(Value::Array(vec![]));
-    Ok(sessions
+    if !out.status.success() {
+        bail!("opencode session list failed");
+    }
+    serde_json::from_slice(&out.stdout).context("invalid opencode session list JSON")
+}
+
+fn session_refs(sessions: &Value, cwd: Option<&str>) -> Vec<SessionRef> {
+    let mut found: Vec<_> = sessions
         .as_array()
         .map(|a| {
             a.iter()
+                .filter(|s| {
+                    cwd.is_none_or(|cwd| {
+                        s["directory"]
+                            .as_str()
+                            .is_some_and(|dir| super::same_dir(dir, cwd))
+                    })
+                })
                 .filter_map(|s| {
                     let updated = s["updated"].as_u64().or(s["time"]["updated"].as_u64());
                     Some(SessionRef {
@@ -68,7 +81,21 @@ pub fn list(cwd: &str) -> Result<Vec<SessionRef>> {
                 })
                 .collect()
         })
-        .unwrap_or_default())
+        .unwrap_or_default();
+    found.sort_by_key(|s| std::cmp::Reverse(s.modified));
+    found
+}
+
+pub fn list(cwd: &str) -> Result<Vec<SessionRef>> {
+    Ok(session_refs(&listed(cwd)?, Some(cwd)))
+}
+
+/// An explicit ID may select a session from another directory, just as with
+/// Claude and Codex. Automatic selection must always stay in the requested cwd.
+pub fn by_id(id: &str, cwd: &str) -> Result<Option<SessionRef>> {
+    Ok(session_refs(&listed(cwd)?, None)
+        .into_iter()
+        .find(|s| s.id == id))
 }
 
 /// `opencode export` into a file: its stdout is cut off when read through a
@@ -199,6 +226,23 @@ pub fn convert(s: &SessionRef) -> Result<Converted> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn automatic_selection_filters_directories_and_sorts_but_explicit_ids_do_not() {
+        let sessions = json!([
+            {"id":"older","directory":"/work/repo/","updated":1},
+            {"id":"other","directory":"/work/other","updated":10},
+            {"id":"missing","updated":20},
+            {"id":"newer","directory":"/work/repo","updated":5}
+        ]);
+        let found = session_refs(&sessions, Some("/work/repo"));
+        assert_eq!(
+            found.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(),
+            vec!["newer", "older"]
+        );
+        assert!(session_refs(&sessions, Some("/work/scratchpad")).is_empty());
+        assert_eq!(session_refs(&sessions, None).len(), 4);
+    }
 
     #[test]
     fn converts_an_export() {

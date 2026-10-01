@@ -695,17 +695,9 @@ fn convert_ide(s: &SessionRef, global: &Path, cwd: &str) -> Result<Converted> {
     let conn = open_ro(global)?;
     let composer = get_json(&conn, "cursorDiskKV", &format!("composerData:{}", s.id))
         .context("Cursor conversation not found in the editor's database")?;
-    let bubbles: Vec<Value> = match composer["fullConversationHeadersOnly"].as_array() {
-        Some(headers) => headers
-            .iter()
-            .filter_map(|h| h["bubbleId"].as_str())
-            .filter_map(|bid| get_json(&conn, "cursorDiskKV", &format!("bubbleId:{}:{bid}", s.id)))
-            .collect(),
-        None => composer["conversation"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default(),
-    };
+    let bubbles = ide_bubbles(&composer, |bid| {
+        get_json(&conn, "cursorDiskKV", &format!("bubbleId:{}:{bid}", s.id))
+    })?;
     let mut b = Builder::default();
     let mut meta = Meta {
         cwd: Some(cwd.to_string()),
@@ -732,6 +724,40 @@ fn convert_ide(s: &SessionRef, global: &Path, cwd: &str) -> Result<Converted> {
         layout: "cursor/editor-v1",
         resume: String::new(),
     })
+}
+
+/// Never silently discard a referenced message: older editor versions can keep
+/// it inline in conversationMap, while newer ones use individual disk KV rows.
+fn ide_bubbles(
+    composer: &Value,
+    mut lookup: impl FnMut(&str) -> Option<Value>,
+) -> Result<Vec<Value>> {
+    if let Some(headers) = composer["fullConversationHeadersOnly"]
+        .as_array()
+        .filter(|h| !h.is_empty())
+    {
+        let mut seen = HashSet::new();
+        let mut bubbles = Vec::with_capacity(headers.len());
+        for header in headers {
+            let id = header["bubbleId"]
+                .as_str()
+                .context("Cursor message header has no bubbleId")?;
+            if !seen.insert(id) {
+                bail!("duplicate Cursor message header");
+            }
+            let value = composer["conversationMap"].get(id).filter(|v| v.is_object()).cloned()
+                .or_else(|| lookup(id)).context("Cursor history is incomplete: a referenced message is missing; reopen the chat in Cursor and retry")?;
+            bubbles.push(value);
+        }
+        return Ok(bubbles);
+    }
+    if let Some(conversation) = composer["conversation"]
+        .as_array()
+        .filter(|c| !c.is_empty())
+    {
+        return Ok(conversation.clone());
+    }
+    bail!("Cursor chat has no readable ordered history; its storage format may be unsupported")
 }
 
 // ─── Entry points ────────────────────────────────────────────────────────────
@@ -774,6 +800,26 @@ pub fn convert(s: &SessionRef, cwd: &str) -> Result<Converted> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn editor_history_uses_ordered_headers_and_never_silently_loses_bubbles() {
+        let composer = json!({"fullConversationHeadersOnly":[{"bubbleId":"first"},{"bubbleId":"second"}],
+            "conversationMap":{"first":{"type":1,"text":"question"}}});
+        let bubbles = ide_bubbles(&composer, |id| {
+            (id == "second").then(|| json!({"type":2,"text":"answer"}))
+        })
+        .unwrap();
+        assert_eq!(bubbles[0]["text"], "question");
+        assert_eq!(bubbles[1]["text"], "answer");
+        assert!(ide_bubbles(&composer, |_| None).is_err());
+        assert!(ide_bubbles(&json!({"fullConversationHeadersOnly":[]}), |_| None).is_err());
+        let legacy =
+            json!({"conversation":[{"type":1,"text":"legacy"}],"fullConversationHeadersOnly":[]});
+        assert_eq!(ide_bubbles(&legacy, |_| None).unwrap()[0]["text"], "legacy");
+        let duplicate =
+            json!({"fullConversationHeadersOnly":[{"bubbleId":"same"},{"bubbleId":"same"}]});
+        assert!(ide_bubbles(&duplicate, |_| Some(json!({"type":1,"text":"duplicate"}))).is_err());
+    }
 
     fn fake_store(dir: &Path) -> String {
         let conn = Connection::open(dir.join("store.db")).unwrap();

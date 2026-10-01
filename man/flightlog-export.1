@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH flightlog-export 1 2026-09-29 "flightlog 0.2.2" "flightlog manual"
+.TH flightlog-export 1 2026-09-30 "flightlog 0.3.0" "flightlog manual"
 .SH NAME
 flightlog\-export \- Export a session to a redacted .flightlog.zip
 .SH SYNOPSIS
-\fBflightlog export\fR [\fB\-\-no\-redact\fR] [\fB\-\-skip\-path\-checks\fR] [\fB\-\-skip\-size\-checks\fR] [\fB\-\-tool\fR] [\fB\-\-session\fR] [\fB\-\-skip\-checksums\fR] [\fB\-\-cwd\fR] [\fB\-\-skip\-format\-checks\fR] [\fB\-\-skip\-content\-checks\fR] [\fB\-\-summary\fR] [\fB\-\-goal\fR] [\fB\-\-overwrite\fR] [\fB\-\-allow\-http\fR] [\fB\-\-state\fR] [\fB\-\-allow\-unredacted\fR] [\fB\-o\fR|\fB\-\-output\fR] [\fB\-\-no\-native\fR] [\fB\-\-yolo\fR] [\fB\-\-redact\-file\fR] [\fB\-\-reviewed\fR] [\fB\-\-include\-metadata\fR] [\fB\-h\fR|\fB\-\-help\fR]
+\fBflightlog export\fR [\fB\-\-no\-redact\fR] [\fB\-\-skip\-path\-checks\fR] [\fB\-\-skip\-size\-checks\fR] [\fB\-\-tool\fR] [\fB\-\-session\fR] [\fB\-\-skip\-checksums\fR] [\fB\-\-input\fR] [\fB\-\-skip\-format\-checks\fR] [\fB\-\-cwd\fR] [\fB\-\-skip\-content\-checks\fR] [\fB\-\-overwrite\fR] [\fB\-\-summary\fR] [\fB\-\-allow\-http\fR] [\fB\-\-goal\fR] [\fB\-\-allow\-unredacted\fR] [\fB\-\-state\fR] [\fB\-o\fR|\fB\-\-output\fR] [\fB\-\-yolo\fR] [\fB\-\-no\-native\fR] [\fB\-\-redact\-file\fR] [\fB\-\-reviewed\fR] [\fB\-\-include\-metadata\fR] [\fB\-h\fR|\fB\-\-help\fR]
 .SH DESCRIPTION
 Export a session to a redacted .flightlog.zip.
 .PP
@@ -37,6 +37,10 @@ opencode: opencode
 gemini: Gemini CLI
 .IP \(bu 2
 cursor: Cursor CLI (cursor\-agent) and the Cursor editor
+.IP \(bu 2
+copilot\-vscode: GitHub Copilot chat in VS Code and compatible editors
+.IP \(bu 2
+copilot: GitHub Copilot CLI
 .RE
 .TP
 \fB\-\-session\fR \fI<ID>\fR
@@ -45,11 +49,14 @@ Session id [default: the newest session for the directory]
 \fB\-\-skip\-checksums\fR
 Ignore manifest SHA\-256 mismatches (ZIP decoding must still succeed)
 .TP
-\fB\-\-cwd\fR \fI<DIR>\fR
-Directory the session ran in [default: current directory]
+\fB\-\-input\fR \fI<FILE>\fR
+Read a Copilot CLI event log or VS Code chat file (requires \-\-tool copilot or copilot\-vscode)
 .TP
 \fB\-\-skip\-format\-checks\fR
 Skip bundle schema and file\-inventory validation
+.TP
+\fB\-\-cwd\fR \fI<DIR>\fR
+Directory the session ran in [default: current directory]
 .TP
 \fB\-\-skip\-content\-checks\fR
 Skip input redaction and opaque\-content checks, regardless of manifest mode
@@ -66,11 +73,11 @@ Accept explicitly unredacted bundles for private migration
 \fB\-o\fR, \fB\-\-output\fR \fI<FILE>\fR
 Output file [default: <session>.flightlog.zip]
 .TP
-\fB\-\-no\-native\fR
-Leave out the tool\*(Aqs own session files: readable, but not resumable
-.TP
 \fB\-\-yolo\fR
 Disable redaction and every bypassable safety check; overwrite outputs
+.TP
+\fB\-\-no\-native\fR
+Leave out native files; shared history can still be converted with restore \-\-to TOOL
 .TP
 \fB\-\-redact\-file\fR \fI<FILE>\fR
 File of private literal names/domains to redact (one per line; kept local)
@@ -98,5 +105,12 @@ Examples:
   flightlog export \-\-goal \*(AqMigrate auth to OIDC\*(Aq \-\-state \*(AqLogin works; logout TODO\*(Aq
   flightlog export \-\-summary summary.json \-\-reviewed \-o handoff.flightlog.zip
   flightlog export \-\-tool codex \-\-session <id> \-\-no\-native
+.TP
+.B COPILOT_HOME
+Copilot CLI configuration and state directory (default ~/.copilot).
+.TP
+.B COPILOT_VSCODE_USER_DATA_DIR
+VS Code compatible editor user data root (the directory containing User).
+By default, Code, Code Insiders and VSCodium user data locations are searched.
 .SH SEE ALSO
 .BR flightlog (1)

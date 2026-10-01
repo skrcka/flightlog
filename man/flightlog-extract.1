@@ -1,6 +1,6 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH flightlog-extract 1 2026-09-29 "flightlog 0.2.2" "flightlog manual"
+.TH flightlog-extract 1 2026-09-30 "flightlog 0.3.0" "flightlog manual"
 .SH NAME
 flightlog\-extract \- Unpack a bundle into a directory (the conversation is trajectory.json)
 .SH SYNOPSIS
@@ -47,5 +47,12 @@ Print help
 .TP
 <\fIFILE\fR>
 The .flightlog.zip
+.TP
+.B COPILOT_HOME
+Copilot CLI configuration and state directory (default ~/.copilot).
+.TP
+.B COPILOT_VSCODE_USER_DATA_DIR
+VS Code compatible editor user data root (the directory containing User).
+By default, Code, Code Insiders and VSCodium user data locations are searched.
 .SH SEE ALSO
 .BR flightlog (1)

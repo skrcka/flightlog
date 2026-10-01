@@ -2,9 +2,29 @@
 
 **Format id:** `flightlog` · **Version:** `1.0`
 
+## Cross-tool restoration
+
+The shared trajectory is the source for destination adapters. Native files are
+optional and only required for original-tool restoration. No format revision is
+needed for text-history conversion.
+
+`restore --to TOOL` consumes shared steps in order and creates new destination
+history. Encoders target Claude, Codex, opencode, Gemini, Cursor CLI, Copilot CLI,
+and VS Code Chat. VS Code and opencode use import files; other destinations write
+new session stores. Native compatibility verification is tracked in README.
+User/agent messages become user/assistant messages. Source system records become
+user-level historical context, never destination system/developer instructions.
+Additional step fields (including tool calls/results, recorded reasoning and
+truncation markers) are preserved as labeled JSON text, not executable events.
+The source metadata and handoff summary are included as historical context.
+No bundled command is executed and no source permissions/configuration are copied.
+Attachments and native-only data are not installed; conversion reports this.
+Conversion rejects empty or malformed steps before writing and bounds both input
+trajectory and generated rollout size unless the explicit size override is set.
+
 A flightlog bundle is one coding-agent session (Claude Code, Codex, opencode, …)
 packaged so it can be shared, read by another person or agent, and resumed in
-the tool it came from. The conversation is stored in the open **ATIF** format
+the tool it came from or converted into a supported destination tool. The conversation is stored in the open **ATIF** format
 (Agent Trajectory Interchange Format v1.8, Harbor RFC 0001:
 <https://github.com/harbor-framework/harbor/blob/main/rfcs/0001-trajectory-format.md>);
 flightlog adds a manifest with a summary, a redaction report and checksums, and
@@ -42,7 +62,7 @@ native/…               OPTIONAL  the tool's own session files (§5)
   "created_at": "2026-09-28T10:00:00Z",     // REQUIRED
   "producer": { "name": "flightlog", "version": "0.1.0" },
   "source": {                               // REQUIRED
-    "tool": "claude_code",                  //   REQUIRED: claude_code | codex | opencode | cursor | gemini_cli | other
+    "tool": "claude_code",                  //   REQUIRED: claude_code | codex | opencode | cursor | gemini_cli | copilot_cli | copilot_vscode | other
     "tool_version": "2.5.3",
     "session_id": "df9d8089-…",             //   REQUIRED: the tool's own id
     "title": "…",
@@ -147,6 +167,8 @@ MUST ignore `native/`.
 |---|---|---|
 | `claude_code/projects-v1` | `<id>.jsonl` and the `<id>/` folder from `~/.claude/projects/<cwd_slug>/` | `claude --resume <id>` |
 | `codex/rollout-v1` | `rollout-<ts>-<id>.jsonl` from `~/.codex/sessions/YYYY/MM/DD/` | `codex resume <id>` |
+| `copilot-cli/events-v1` | `<id>.jsonl` containing the Copilot CLI event log | `copilot --resume <id>` |
+| `copilot-vscode/chat-v1` | `<id>.json`, normalized from chat JSON or JSONL mutation log | VS Code **Chat: Import Chat** |
 | `opencode/export-v1` | the JSON of `opencode export <id>` | `opencode import <file>` |
 | `gemini-cli/chats-v1` | `session-<ts>-<id8>.jsonl` from `~/.gemini/tmp/<project>/chats/` | `gemini --resume <id>` |
 | `cursor/chats-v1` | `<id>.cursor-store.json`: a JSON dump of the Cursor CLI's `store.db` (below) | `cursor-agent --resume <id>` |

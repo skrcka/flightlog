@@ -23,7 +23,7 @@ pub fn restore(b: &Bundle, cwd: &str, work_dir: &Path, force: bool) -> Result<Re
     }
     let layout = native["layout"]
         .as_str()
-        .context("bundle is not resumable")?;
+        .context("bundle has no native session; use flightlog restore FILE --to TOOL to convert its shared history")?;
     let tool = b.manifest["source"]["tool"].as_str().unwrap_or("");
     let files: Vec<_> = b
         .files
@@ -31,7 +31,7 @@ pub fn restore(b: &Bundle, cwd: &str, work_dir: &Path, force: bool) -> Result<Re
         .filter(|(n, _)| n.starts_with("native/"))
         .collect();
     if files.is_empty() {
-        bail!("bundle has no native files");
+        bail!("bundle has no native files; use flightlog restore FILE --to TOOL to convert its shared history");
     }
     let expected = match layout {
         cursor::CLI_LAYOUT => "cursor",
@@ -39,13 +39,23 @@ pub fn restore(b: &Bundle, cwd: &str, work_dir: &Path, force: bool) -> Result<Re
         "claude_code/projects-v1" => "claude_code",
         "codex/rollout-v1" => "codex",
         "gemini-cli/chats-v1" => "gemini_cli",
+        sources::copilot_vscode::LAYOUT => "copilot_vscode",
+        sources::copilot::LAYOUT => "copilot_cli",
         _ if options.skip_format_checks && options.skip_path_checks => tool,
         _ => bail!("unsupported native layout"),
     };
     if !options.skip_format_checks && (tool != expected || native["tool"] != expected) {
         bail!("native tool/layout mismatch");
     }
-    if options.skip_path_checks && !matches!(layout, cursor::CLI_LAYOUT | "opencode/export-v1") {
+    if options.skip_path_checks
+        && !matches!(
+            layout,
+            cursor::CLI_LAYOUT
+                | "opencode/export-v1"
+                | sources::copilot_vscode::LAYOUT
+                | sources::copilot::LAYOUT
+        )
+    {
         return restore_templates(b, cwd, force, files.len());
     }
     if layout == cursor::CLI_LAYOUT {
@@ -64,17 +74,47 @@ pub fn restore(b: &Bundle, cwd: &str, work_dir: &Path, force: bool) -> Result<Re
             },
         });
     }
-    if layout == "opencode/export-v1" {
+    if layout == sources::copilot::LAYOUT {
+        if files.len() != 1 || files[0].0 != &format!("native/{id}.jsonl") {
+            bail!("unexpected Copilot native files");
+        }
+        let events = sources::copilot::parse(files[0].1)?;
+        if events[0]["data"]["sessionId"] != id {
+            bail!("Copilot session id mismatch");
+        }
+        let dest = sources::copilot::copilot_home()
+            .join("session-state")
+            .join(id)
+            .join("events.jsonl");
+        safe_fs::write(&dest, files[0].1, force)?;
+        return Ok(Restored {
+            written: vec![dest],
+            next: format!("copilot --resume {id}"),
+        });
+    }
+    if matches!(
+        layout,
+        "opencode/export-v1" | sources::copilot_vscode::LAYOUT
+    ) {
         if !options.skip_format_checks
             && (files.len() != 1 || files[0].0 != &format!("native/{id}.json"))
         {
-            bail!("unexpected opencode native files");
+            bail!("unexpected native import files");
         }
         if !options.skip_path_checks {
             uuid::Uuid::parse_str(b.manifest["bundle_id"].as_str().unwrap_or(""))?;
         }
         let dest = work_dir.join(format!("{id}.json"));
         safe_fs::write(&dest, files[0].1, force)?;
+        if layout == sources::copilot_vscode::LAYOUT {
+            return Ok(Restored {
+                next: format!(
+                    "In VS Code, run Chat: Import Chat from the Command Palette and select {}",
+                    safe_fs::display(&dest)
+                ),
+                written: vec![dest],
+            });
+        }
         #[cfg(not(windows))]
         let next = format!(
             "opencode import {}",

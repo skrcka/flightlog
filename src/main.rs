@@ -5,6 +5,7 @@ mod atif;
 mod bundle;
 mod bypass;
 mod man;
+mod migrate;
 mod redact;
 mod restore;
 mod safe_fs;
@@ -26,6 +27,7 @@ Examples:
   flightlog export --goal 'Fix login' --state 'Done; needs review'
   flightlog inspect <id>.flightlog.zip            summary, stats, what was redacted
   flightlog restore <id>.flightlog.zip            put it back, print the resume command
+  flightlog restore <id>.flightlog.zip --to codex  continue shared history in Codex
 
 Teach your agent to do this itself:
   flightlog skills install
@@ -97,6 +99,14 @@ enum Cmd {
         /// Session id [default: the newest session for the directory]
         #[arg(long, value_name = "ID")]
         session: Option<String>,
+        /// Read a Copilot CLI event log or VS Code chat file (requires --tool copilot or copilot-vscode)
+        #[arg(
+            long,
+            value_name = "FILE",
+            requires = "tool",
+            conflicts_with = "session"
+        )]
+        input: Option<PathBuf>,
         /// Directory the session ran in [default: current directory]
         #[arg(long, value_name = "DIR")]
         cwd: Option<PathBuf>,
@@ -112,7 +122,7 @@ enum Cmd {
         /// Output file [default: <session>.flightlog.zip]
         #[arg(short, long, value_name = "FILE")]
         output: Option<PathBuf>,
-        /// Leave out the tool's own session files: readable, but not resumable
+        /// Leave out native files; shared history can still be converted with restore --to TOOL
         #[arg(long)]
         no_native: bool,
         /// Record in the bundle that a person reviewed the redaction report
@@ -143,19 +153,29 @@ enum Cmd {
         #[arg(short, long, value_name = "DIR")]
         output: Option<PathBuf>,
     },
-    /// Put a bundle's session back so its tool can resume it
+    /// Restore the original session or convert shared history into another tool
     #[command(
         display_order = 6,
-        long_about = "Put a bundle's session back so its tool can resume it.\n\n\
+        long_about = "Restore the original session or convert shared history into another tool.\n\n\
+            With --to TOOL, creates destination history from the shared trajectory, \
+            even without native files. Messages and recorded details become historical \
+            context; tool calls are not replayed. Source permissions, configuration, \
+            attachments and native files are not installed. --cwd selects the project; \
+            it does not rewrite paths inside message text.\n\n\
+            Without --to, restores the original tool's native session. \
             Writes the tool's own session files where it looks for them (never \
             overwriting without --force, --overwrite or --yolo) and prints the command to run: \
-            claude --resume, codex resume, opencode import, gemini --resume or \
-            cursor-agent --resume. Paths inside a session are absolute, so resume in \
+            claude --resume, codex resume, opencode import, gemini --resume, \
+            cursor-agent --resume, copilot --resume, or VS Code Chat: Import Chat. \
+            Paths inside a session are absolute, so resume in \
             a directory holding the same repository."
     )]
     Restore {
         /// The .flightlog.zip
         file: PathBuf,
+        /// Convert the shared conversation into a fresh destination session
+        #[arg(long, value_enum)]
+        to: Option<migrate::Destination>,
         /// Directory to resume in [default: current directory]
         #[arg(long, value_name = "DIR")]
         cwd: Option<PathBuf>,
@@ -363,6 +383,7 @@ fn run() -> Result<()> {
             no_redact,
             tool,
             session,
+            input,
             cwd,
             summary,
             goal,
@@ -374,7 +395,14 @@ fn run() -> Result<()> {
         } => {
             let no_redact = no_redact || cli.yolo;
             let cwd = cwd_of(cwd)?;
-            let s = sources::pick(tool, session.as_deref(), &cwd)?;
+            let s = match input {
+                Some(path) => match tool {
+                    Some(Tool::CopilotVscode) => sources::copilot_vscode::from_file(path)?,
+                    Some(Tool::Copilot) => sources::copilot::from_file(path)?,
+                    _ => bail!("--input currently requires --tool copilot or copilot-vscode"),
+                },
+                None => sources::pick(tool, session.as_deref(), &cwd)?,
+            };
             let c = sources::convert(&s, &cwd)?;
             let mut summary_v = match summary {
                 Some(p) => serde_json::from_slice(
@@ -472,7 +500,7 @@ fn run() -> Result<()> {
                 if m["native"].is_object() {
                     "use flightlog restore to derive a safe command"
                 } else {
-                    "not resumable"
+                    "no native session; convert shared history with flightlog restore FILE --to TOOL"
                 }
             );
             let findings = m["redaction"]["findings"]
@@ -559,14 +587,29 @@ fn run() -> Result<()> {
                 })?;
             print!("{body}");
         }
-        Cmd::Restore { file, cwd, force } => {
+        Cmd::Restore {
+            file,
+            to,
+            cwd,
+            force,
+        } => {
             let b = bundle::read(&file, allow_unredacted)?;
             let cwd = cwd_of(cwd)?;
             let work =
                 Path::new(".flightlog").join(b.manifest["bundle_id"].as_str().unwrap_or("bundle"));
-            let r = restore::restore(&b, &cwd, &work, force)?;
+            let r = if let Some(to) = to {
+                let restored = migrate::restore(&b, to, &cwd)?;
+                println!("converted shared history; tool calls and source system records are historical text, not executable state");
+                println!("native files, attachments, source permissions and configuration are not installed; only content already in the trajectory is transferred");
+                restored
+            } else {
+                restore::restore(&b, &cwd, &work, force)?
+            };
             for p in &r.written {
                 println!("restored {}", safe_fs::display(p));
+            }
+            if matches!(to, Some(migrate::Destination::Opencode)) {
+                println!("after importing, open the session in opencode and choose a configured model before continuing");
             }
             if let Some(orig) = b.manifest["source"]["cwd"].as_str().filter(|o| *o != cwd) {
                 println!(

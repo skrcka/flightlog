@@ -2,6 +2,8 @@
 
 pub mod claude;
 pub mod codex;
+pub mod copilot;
+pub mod copilot_vscode;
 pub mod cursor;
 pub mod gemini;
 pub mod opencode;
@@ -25,15 +27,21 @@ pub enum Tool {
     Gemini,
     /// Cursor CLI (cursor-agent) and the Cursor editor
     Cursor,
+    /// GitHub Copilot chat in VS Code and compatible editors
+    CopilotVscode,
+    /// GitHub Copilot CLI
+    Copilot,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 5] = [
+    pub const ALL: [Tool; 7] = [
         Tool::Claude,
         Tool::Codex,
         Tool::Opencode,
         Tool::Gemini,
         Tool::Cursor,
+        Tool::CopilotVscode,
+        Tool::Copilot,
     ];
 
     /// `source.tool` in the manifest (spec §2.1).
@@ -44,6 +52,8 @@ impl Tool {
             Tool::Opencode => "opencode",
             Tool::Gemini => "gemini_cli",
             Tool::Cursor => "cursor",
+            Tool::CopilotVscode => "copilot_vscode",
+            Tool::Copilot => "copilot_cli",
         }
     }
 }
@@ -152,6 +162,8 @@ pub fn list(tool: Tool, cwd: &str) -> Result<Vec<SessionRef>> {
         Tool::Opencode => opencode::list(cwd),
         Tool::Gemini => gemini::list(cwd),
         Tool::Cursor => cursor::list(cwd),
+        Tool::CopilotVscode => copilot_vscode::list(cwd),
+        Tool::Copilot => copilot::list(cwd),
     }
 }
 
@@ -172,10 +184,9 @@ pub fn pick(tool: Option<Tool>, session: Option<&str>, cwd: &str) -> Result<Sess
                 Tool::Codex => codex::by_id(id).into_iter().collect(),
                 Tool::Gemini => gemini::by_id(id).into_iter().collect(),
                 Tool::Cursor => cursor::by_id(id, cwd).into_iter().collect(),
-                Tool::Opencode => opencode::list(cwd)?
-                    .into_iter()
-                    .filter(|s| s.id == id)
-                    .collect(),
+                Tool::CopilotVscode => copilot_vscode::by_id(id).into_iter().collect(),
+                Tool::Copilot => copilot::by_id(id).into_iter().collect(),
+                Tool::Opencode => opencode::by_id(id, cwd)?.into_iter().collect(),
             },
             None => list(t, cwd)?,
         };
@@ -198,6 +209,8 @@ pub fn convert(s: &SessionRef, cwd: &str) -> Result<Converted> {
         Tool::Opencode => opencode::convert(s),
         Tool::Gemini => gemini::convert(s),
         Tool::Cursor => cursor::convert(s, cwd),
+        Tool::CopilotVscode => copilot_vscode::convert(s),
+        Tool::Copilot => copilot::convert(s),
     }
 }
 

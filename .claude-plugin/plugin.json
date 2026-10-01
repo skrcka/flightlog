@@ -1,6 +1,6 @@
 {
   "name": "flightlog",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Export the current coding-agent session as a portable, redacted flightlog bundle, and import or resume one.",
   "homepage": "https://flightlog.sh",
   "repository": "https://github.com/skrcka/flightlog",

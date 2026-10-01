@@ -1,6 +1,6 @@
 ---
 name: flightlog-export
-description: Save the current coding-agent session (Claude Code, Codex, opencode, Gemini CLI or Cursor) as a portable, redacted flightlog bundle, and optionally upload it to a task tracker or presigned URL. Use when the user asks to save, export, hand off, share or attach this session or its context (e.g. "export this session", "attach this session to PROJ-42").
+description: Save the current coding-agent session (Claude Code, Codex, opencode, Gemini CLI, Cursor or GitHub Copilot) as a portable, redacted flightlog bundle, and optionally upload it to a task tracker or presigned URL. Use when the user asks to save, export, hand off, share or attach this session or its context (e.g. "export this session", "attach this session to PROJ-42").
 ---
 
 # Export this session with flightlog
@@ -41,9 +41,14 @@ irm https://flightlog.sh/install.ps1 | iex          # Windows
    flightlog export --summary summary.json -o session.flightlog.zip
    ```
    It picks the newest session for this directory. `flightlog list` shows
-   the others; pick one with `--tool claude|codex|opencode|gemini|cursor --session <id>`.
-   `--no-native` leaves out the tool's own files (the bundle can then be read
-   but not resumed).
+   the others; pick one with `--tool claude|codex|opencode|gemini|cursor|copilot|copilot-vscode --session <id>`.
+   `copilot` reads Copilot CLI; `copilot-vscode` reads VS Code chat storage.
+   For a manually exported editor chat, use `--tool copilot-vscode --input chat.json`.
+   `--tool copilot --input events.jsonl` reads a Copilot CLI event log.
+   `--input` cannot be combined with `--session`.
+   `--no-native` leaves out the tool's own files. The shared history can still
+   be read or converted with `restore --to TOOL`; original-tool native resume
+   requires the native files.
    Use `--redact-file /private/policy.txt` for confidential names and aliases.
    Keep the policy outside the repository. Metadata is omitted by default;
    `--include-metadata` deliberately includes repository and directory details.
