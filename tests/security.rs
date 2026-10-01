@@ -501,7 +501,12 @@ fn copilot_discovery_matches_workspace_and_rejects_broken_explicit_inputs() {
     let f = Fixture::new();
     let workspace = f.root.join("vscode/User/workspaceStorage/workspace");
     fs::create_dir_all(workspace.join("chatSessions")).unwrap();
-    let cwd = f.root.to_str().unwrap().replace('\\', "/");
+    // The canonical Windows root carries a `\\?\` verbatim prefix that VS Code never writes into a file URI.
+    let root = f.root.to_str().unwrap();
+    let cwd = root
+        .strip_prefix(r"\\?\")
+        .unwrap_or(root)
+        .replace('\\', "/");
     let folder = if cfg!(windows) {
         format!("file:///{cwd}")
     } else {
