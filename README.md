@@ -1,3 +1,5 @@
+<img src="site/icon.svg" alt="flightlog icon" width="88" height="88" align="right">
+
 # flightlog
 
 Record a coding-agent session — **Claude Code, Codex, opencode, Gemini CLI,

@@ -10,6 +10,7 @@
   "plugins": [
     {
       "name": "flightlog",
+      "logo": "site/icon.svg",
       "source": "./",
       "description": "Export the current coding-agent session as a portable, redacted bundle, and import or resume one."
     }

@@ -16,6 +16,8 @@
   and inspection output, while retaining the encoded-content redaction guard.
 - Validate conversion inputs and bound generated session size. Existing native
   restore and unredacted-bundle opt-in remain unchanged.
+- Add the flightlog icon to flightlog.sh (favicon, touch icon and social preview
+  image), the README and the Cursor plugin manifest.
 
 ## [0.2.2] - 2026-09-29
 

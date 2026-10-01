@@ -1,6 +1,7 @@
 {
   "name": "flightlog",
   "displayName": "flightlog",
+  "logo": "site/icon.svg",
   "version": "0.3.0",
   "description": "Export the current coding-agent session as a portable, redacted bundle, and import or resume one.",
   "author": {

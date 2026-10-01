@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="flightlog: three sources merging into one zipped bundle">
+  <rect width="512" height="512" rx="112" fill="#101217"/>
+  <g fill="none" stroke="#F4F1EA" stroke-width="22" stroke-linecap="round">
+    <path d="M122 152C210 152 210 256 300 256"/>
+    <path d="M122 256H300"/>
+    <path d="M122 360C210 360 210 256 300 256"/>
+  </g>
+  <g fill="#F4F1EA">
+    <circle cx="104" cy="152" r="22"/>
+    <circle cx="104" cy="256" r="22"/>
+    <circle cx="104" cy="360" r="22"/>
+  </g>
+  <rect x="290" y="168" width="136" height="176" rx="28" fill="#FFB547"/>
+  <g fill="#101217">
+    <rect x="344" y="190" width="14" height="12" rx="3"/>
+    <rect x="344" y="218" width="14" height="12" rx="3"/>
+    <rect x="344" y="246" width="14" height="12" rx="3"/>
+    <rect x="344" y="274" width="14" height="12" rx="3"/>
+    <rect x="358" y="204" width="14" height="12" rx="3"/>
+    <rect x="358" y="232" width="14" height="12" rx="3"/>
+    <rect x="358" y="260" width="14" height="12" rx="3"/>
+    <rect x="358" y="288" width="14" height="12" rx="3"/>
+    <rect x="342" y="304" width="32" height="24" rx="8"/>
+  </g>
+</svg>
